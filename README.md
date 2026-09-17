@@ -158,6 +158,16 @@ techniques for personalized learning*. Discover Education, v. 4, art. 458,
 
 ---
 
+## Status do projeto
+
+O projeto encontra-se atualmente na etapa de concepção e definição da proposta.
+A implementação do sistema será desenvolvida de forma incremental nas próximas
+etapas da disciplina.
+
+As instruções de execução serão adicionadas ao README conforme os serviços forem implementados.
+
+---
+
 <div align="center">
 
 ### MentorIA
