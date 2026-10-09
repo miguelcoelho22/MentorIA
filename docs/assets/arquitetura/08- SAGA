@@ -18,10 +18,9 @@ Feedback: solicita a análise ao AI Service e prepara e publica o feedback.
 
 O AI Service realiza a análise da redação. O Study Plan fica fora desta SAGA; atualizações do plano são tratadas separadamente por eventos reprocessáveis.
 
-Fluxo e compensações
+## Fluxo e compensações
 
-![Texto alternativo da imagem](../assets/fluxo.png)
-
+![Fluxo e compensações](../fluxo.png)
 
 
 Etapa
