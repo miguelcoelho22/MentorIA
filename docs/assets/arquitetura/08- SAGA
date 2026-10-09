@@ -1,0 +1,171 @@
+SAGA — Solicitação de Correção de Redação
+
+Objetivo
+
+A SAGA coordena a solicitação de correção de uma redação na MentorIA, garantindo que os serviços envolvidos concluam suas etapas ou executem compensações em caso de falha.
+
+Estratégia escolhida
+
+Será utilizada uma SAGA orquestrada, coordenada pelo serviço Assessment. Essa abordagem centraliza o estado e a sequência da operação. A alternativa coreografada distribuiria a lógica entre eventos de vários serviços, dificultando o acompanhamento e a investigação de falhas.
+
+A transação envolve três serviços:
+
+Assessment: cria a solicitação e coordena a SAGA.
+
+Account: reserva e confirma o consumo da cota de correções.
+
+Feedback: solicita a análise ao AI Service e prepara e publica o feedback.
+
+O AI Service realiza a análise da redação. O Study Plan fica fora desta SAGA; atualizações do plano são tratadas separadamente por eventos reprocessáveis.
+
+Fluxo e compensações
+
+![Texto alternativo da imagem](./assets/fluxo.png)
+
+
+
+Etapa
+
+Serviço
+
+Ação
+
+Em caso de falha
+
+1
+
+Assessment
+
+Cria solicitação PROCESSING e registra a SAGA.
+
+Marca FAILED ou REJECTED.
+
+2
+
+Account
+
+Reserva uma unidade da cota.
+
+Libera a reserva.
+
+3
+
+Feedback
+
+Solicita análise ao AI Service e salva feedback como DRAFT.
+
+Cancela o rascunho e libera a reserva.
+
+4
+
+Feedback
+
+Publica o feedback e grava FeedbackPublished na outbox.
+
+É o ponto pivô: após a publicação, a SAGA avança até concluir.
+
+5
+
+Account
+
+Confirma o consumo da reserva.
+
+Repete a operação em caso de falha técnica.
+
+6
+
+Assessment
+
+Marca a solicitação COMPLETED.
+
+Repete a operação em caso de falha técnica.
+
+A reserva já conta contra a cota disponível. Portanto, um atraso na confirmação não permite ultrapassar o limite. Depois que o feedback é publicado, a cota não é devolvida.
+
+Caminho feliz
+
+O aluno solicita a correção e recebe 202 Accepted com um link para consultar o estado.
+
+Assessment reserva a cota por meio de Account.
+
+Feedback pede a análise ao AI Service e grava o resultado como rascunho.
+
+Assessment solicita a publicação do feedback.
+
+Account confirma o consumo da cota.
+
+Assessment marca a solicitação como COMPLETED.
+
+sequenceDiagram
+    autonumber
+    participant C as BFF Aluno
+    participant AS as Assessment (orquestrador)
+    participant AC as Account
+    participant FB as Feedback
+    participant AI as AI Service
+
+    C->>AS: POST /essays/{essayId}/correction-requests
+    AS->>AS: Cria solicitação e registro da SAGA
+    AS-->>C: 202 Accepted + Location
+    AS->>AC: Reservar cota
+    AC-->>AS: Reserva criada
+    AS->>FB: Solicitar análise e criar DRAFT
+    FB->>AI: Analisar redação
+    AI-->>FB: Resultado da análise
+    FB-->>AS: DRAFT criado
+    AS->>FB: Publicar feedback
+    FB-->>AS: Feedback publicado + outbox
+    AS->>AC: Confirmar consumo da cota
+    AC-->>AS: Confirmado
+    AS->>AS: Marca COMPLETED
+
+Falha e compensação
+
+Se o AI Service estiver indisponível, Feedback retorna erro após as tentativas configuradas. Assessment inicia a compensação: cancela o rascunho, libera a reserva e marca a solicitação como FAILED. A redação original permanece salva, e o aluno pode solicitar uma nova correção.
+
+sequenceDiagram
+    autonumber
+    participant C as BFF Aluno
+    participant AS as Assessment (orquestrador)
+    participant AC as Account
+    participant FB as Feedback
+    participant AI as AI Service
+
+    C->>AS: Solicitar correção
+    AS-->>C: 202 Accepted + Location
+    AS->>AC: Reservar cota
+    AC-->>AS: Reserva criada
+    AS->>FB: Solicitar análise
+    FB-xAI: AI Service indisponível
+    FB-->>AS: Erro após tentativas
+    AS->>FB: Cancelar DRAFT, se existir
+    FB-->>AS: Cancelado ou inexistente
+    AS->>AC: Liberar reserva
+    AC-->>AS: Reserva liberada
+    AS->>AS: Marca FAILED
+
+Regras de execução
+
+Assíncrona: o pedido retorna 202 Accepted; o aluno consulta o estado pelo link Location.
+
+Persistência: Assessment salva o estado da SAGA e retoma operações pendentes após reiniciar.
+
+Idempotência: os comandos usam requestId; repeti-los não deve duplicar efeitos.
+
+Timeouts: 60 segundos para a etapa de análise e 5 segundos para as demais chamadas.
+
+Pós-publicação: falhas técnicas após o ponto pivô são tratadas por repetição até a conclusão, sem desfazer o feedback publicado.
+
+Estados internos previstos: STARTED, QUOTA_RESERVED, DRAFT_READY, PUBLISHED, QUOTA_CONFIRMED, COMPLETED, COMPENSATING e COMPENSATED.
+
+Demonstração na Parte 4
+
+Desligar o AI Service.
+
+Solicitar a correção de uma redação.
+
+Mostrar a solicitação em FAILED, a cota liberada e a redação preservada.
+
+Ligar novamente o AI Service.
+
+Fazer uma nova solicitação e demonstrar o estado COMPLETED.
