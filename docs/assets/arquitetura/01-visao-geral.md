@@ -23,6 +23,7 @@ Funcionalidades como simulados e questões objetivas poderão ser incorporadas f
 
 ## 3. Arquitetura geral
 
+
 ```mermaid
 flowchart TB
     WS["App do Aluno"] --> GW["API Gateway"]
@@ -39,8 +40,8 @@ flowchart TB
         SP["Study Plan"]
     end
 
-    BS --> AC & AS & FB & SP
-    BT --> AC & AS & FB & SP
+    BS --> DOM
+    BT --> DOM
 
     AS ==>|"Comandos da SAGA"| AC
     AS ==>|"Comandos da SAGA"| FB
@@ -51,6 +52,7 @@ flowchart TB
     FB -.->|"FeedbackPublished"| MQ[("RabbitMQ")]
     MQ -.-> SP
 ```
+
 
 Os quatro serviços de domínio possuem bancos PostgreSQL independentes. Nenhum serviço acessa diretamente o banco de outro.
 
