@@ -7,6 +7,7 @@ A SAGA coordena a solicitação de correção de uma redação na MentorIA, gara
 ## Estratégia escolhida
 
 Será utilizada uma **SAGA orquestrada**, coordenada pelo serviço **Assessment**. Essa abordagem centraliza o estado e a sequência da operação.
+O fluxo possui uma ordem de dependência rígida e linear (Assessment $\rightarrow$ Account $\rightarrow$ Feedback). Em uma SAGA Coreografada, a ausência de um coordenador central exigiria que cada microsserviço gerenciasse reações a múltiplos eventos, criando um acoplamento implícito e uma teia de mensagens difícil de auditar.
 
 A transação envolve três serviços:
 
