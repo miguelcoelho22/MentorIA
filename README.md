@@ -128,17 +128,6 @@ de uma orientação de estudos mais personalizada.
 
 ---
 
-## Integrantes
-
-| Integrante |
-| --- |
-| Gracielle Ázara |
-| Marcos Silva |
-| Matheus Cunha |
-| Miguel Coelho |
-
----
-
 ## Referências
 
 **[1] OECD.** *PISA 2025 Results (Volume I): Brazil*. OECD Publishing, 2026.
@@ -158,11 +147,57 @@ techniques for personalized learning*. Discover Education, v. 4, art. 458,
 
 ---
 
+## Arquitetura — Parte 2
+
+A MentorIA adotará uma arquitetura de microsserviços para separar as responsabilidades do sistema e permitir a evolução independente de seus componentes.
+
+A solução será composta por quatro microsserviços de domínio — **Account, Assessment, Feedback e Study Plan** —, cada um com seu próprio banco PostgreSQL.
+
+A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web e componentes de apoio para inteligência artificial e comunicação assíncrona.
+
+### Andamento da documentação
+
+| Frente | Responsável | Situação |
+|---|---|---|
+| 1 — Decomposição e Gateway | Gracielle | Concluída |
+| 2 — API REST e BFFs | Matheus | Em desenvolvimento |
+| 3 — Dados, Outbox e CQRS | Marcos | Em desenvolvimento |
+| 4 — SAGA | Miguel | Documentada, em revisão final |
+
+### Índice da documentação
+
+**Frente 1 — Decomposição e Gateway**
+
+- [01 — Visão Geral da Arquitetura](docs/01-visao-geral.md)
+- [02 — Microsserviços e Fronteiras](docs/02-servicos.md)
+- [03 — API Gateway](docs/03-gateway.md)
+
+**Frente 2 — API REST e BFFs (em desenvolvimento)**
+
+- `04-api-rest.md`
+- `openapi/` — contratos dos quatro microsserviços
+- `05-bff.md`
+
+**Frente 3 — Dados, Outbox e CQRS (em desenvolvimento)**
+
+- `06-dados-outbox.md`
+- `07-cqrs.md`
+
+**Frente 4 — SAGA**
+
+- [08 — SAGA de Correção de Redação](docs/08-saga.md)
+
+A documentação será atualizada conforme as frentes forem concluídas, mantendo as decisões arquiteturais consistentes entre os arquivos.
+
+---
+
 ## Status do projeto
 
-O projeto encontra-se atualmente na etapa de concepção e definição da proposta.
-A implementação do sistema será desenvolvida de forma incremental nas próximas
-etapas da disciplina.
+A **Parte 1 — Apresentação da proposta** foi concluída.
+
+Atualmente, a MentorIA está na **Parte 2 — Definição e documentação da arquitetura**, com as responsabilidades dos microsserviços, fluxos de comunicação e decisões técnicas sendo registradas no repositório.
+
+As próximas etapas contemplam a conteinerização com Docker e Kubernetes e a implementação funcional do sistema com integração à inteligência artificial.
 
 As instruções de execução serão adicionadas ao README conforme os serviços forem implementados.
 
