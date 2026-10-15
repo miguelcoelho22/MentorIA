@@ -168,9 +168,9 @@ A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web 
 
 **Frente 1 — Decomposição e Gateway**
 
-- [01 — Visão Geral da Arquitetura](docs/01-visao-geral.md)
-- [02 — Microsserviços e Fronteiras](docs/02-servicos.md)
-- [03 — API Gateway](docs/03-gateway.md)
+- [01 — Visão Geral da Arquitetura](docs/assets/arquitetura/01-visao-geral.md)
+- [02 — Microsserviços e Fronteiras](docs/assets/arquitetura/02-servicos.md)
+- [03 — API Gateway](docs/assets/arquitetura/03-gateway.md)
 
 **Frente 2 — API REST e BFFs (em desenvolvimento)**
 
@@ -185,7 +185,7 @@ A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web 
 
 **Frente 4 — SAGA**
 
-- [08 — SAGA de Correção de Redação](docs/08-saga.md)
+- [08 — SAGA de Correção de Redação](docs/assets/arquitetura/08-SAGA.md)
 
 A documentação será atualizada conforme as frentes forem concluídas, mantendo as decisões arquiteturais consistentes entre os arquivos.
 
