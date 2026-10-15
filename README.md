@@ -178,10 +178,10 @@ A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web 
 - `openapi/` — contratos dos quatro microsserviços
 - `05-bff.md`
 
-**Frente 3 — Dados, Outbox e CQRS (em desenvolvimento)**
+**Frente 3 — Dados, Outbox e CQRS**
 
-- `06-dados-outbox.md`
-- `07-cqrs.md`
+- [06 — Banco de Dados, Consistência Eventual e Outbox](docs/assets/arquitetura/06-dados-outbox.md)
+- [07 — CQRS no Study Plan](docs/assets/arquitetura/07-cqrs.md)
 
 **Frente 4 — SAGA**
 
