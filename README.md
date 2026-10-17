@@ -160,7 +160,7 @@ A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web 
 | Frente | Responsável | Situação |
 |---|---|---|
 | 1 — Decomposição e Gateway | Gracielle | Concluída |
-| 2 — API REST e BFFs | Matheus | Em desenvolvimento |
+| 2 — API REST e BFFs | Matheus | Parcialmente concluída |
 | 3 — Dados, Outbox e CQRS | Marcos | Concluída |
 | 4 — SAGA | Miguel | Concluída |
 
@@ -172,11 +172,11 @@ A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web 
 - [02 — Microsserviços e Fronteiras](docs/assets/arquitetura/02-servicos.md)
 - [03 — API Gateway](docs/assets/arquitetura/03-gateway.md)
 
-**Frente 2 — API REST e BFFs (em desenvolvimento)**
+**Frente 2 — API REST e BFFs**
 
-- `04-api-rest.md`
-- `openapi/` — contratos dos quatro microsserviços
-- `05-bff.md`
+- [04 — API REST e Contratos dos Serviços](docs/assets/arquitetura/04-api-rest.md)
+- [05 — Backend for Frontend (BFF)](docs/assets/arquitetura/05-bff.md)
+- `openapi/` — quatro contratos YAML (pendentes)
 
 **Frente 3 — Dados, Outbox e CQRS**
 
