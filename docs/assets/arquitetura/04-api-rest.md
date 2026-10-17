@@ -240,7 +240,7 @@ Content-Type: application/json
 
 #### Comandos da SAGA
 
-Os três `PUT` e os dois `DELETE` de reserva e de feedback são os comandos da SAGA. Só o Assessment os chama, e nenhum BFF os expõe.
+Os quatro `PUT` e os dois `DELETE` de reserva e de feedback são os comandos da SAGA. Só o Assessment os chama, e nenhum BFF os expõe.
 
 | Passo da SAGA (`08-SAGA.md`) | Comando |
 |---|---|
