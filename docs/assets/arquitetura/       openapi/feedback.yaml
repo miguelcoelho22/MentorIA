@@ -1,0 +1,241 @@
+openapi: 3.0.3
+info:
+  title: MentorIA — Feedback
+  version: 1.0.0
+  description: >
+    Gera o rascunho do feedback com o AI Service, publica ou cancela. A
+    publicação grava o evento FeedbackPublished na outbox na mesma transação.
+    Os dois PUT e o DELETE são comandos da SAGA, chamados apenas pelo
+    Assessment (orquestrador). Só feedbacks PUBLISHED são visíveis nas consultas.
+servers:
+  - url: http://feedback-service:8080
+    description: Rede interna
+tags:
+  - name: feedbacks
+    description: Consultas (BFFs)
+  - name: saga
+    description: Comandos da SAGA (somente Assessment)
+
+paths:
+  /api/v1/feedbacks/{requestId}:
+    put:
+      tags: [saga]
+      summary: Solicita a análise ao AI Service e grava o feedback como DRAFT (passo 3)
+      description: >
+        O orquestrador envia o texto da redação no corpo, evitando que o Feedback
+        chame o Assessment de volta. Idempotente: repetir com o mesmo requestId
+        devolve o rascunho existente (200) sem nova chamada ao AI Service.
+      operationId: createDraft
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DraftRequest'
+            example:
+              studentId: b7e1
+              essayId: 41ab
+              theme: Desafios da mobilidade urbana no Brasil
+              text: Segundo a Constituição Federal de 1988, o transporte é um direito social...
+      responses:
+        '201':
+          description: Rascunho criado
+          headers:
+            Location:
+              schema: { type: string }
+              example: /api/v1/feedbacks/9f2c
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback'
+              example:
+                requestId: 9f2c
+                studentId: b7e1
+                essayId: 41ab
+                status: DRAFT
+                totalScore: 640
+                competencies:
+                  - { id: 1, score: 160, comment: 'Poucos desvios; atenção à regência verbal.' }
+                  - { id: 2, score: 120, comment: 'Tema compreendido, repertório pouco explorado.' }
+                  - { id: 3, score: 120, comment: 'Argumentos pouco desenvolvidos.' }
+                  - { id: 4, score: 160, comment: 'Boa articulação entre parágrafos.' }
+                  - { id: 5, score: 80, comment: 'Faltam agente e detalhamento da ação.' }
+        '200':
+          description: O rascunho já existia (repetição do comando)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          description: AI Service indisponível após as tentativas; o Assessment inicia a compensação
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://mentoria.app/errors/ai-unavailable
+                title: Serviço de IA indisponível
+                status: 503
+                detail: O AI Service não respondeu após as tentativas configuradas.
+                instance: /api/v1/feedbacks/9f2c
+    delete:
+      tags: [saga]
+      summary: Cancela o rascunho (compensação)
+      description: >
+        Idempotente: responde 204 mesmo se o rascunho não existir, para que o
+        orquestrador possa compensar após um timeout sem consulta prévia.
+      operationId: cancelDraft
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204':
+          description: Rascunho cancelado (CANCELLED) ou inexistente
+        '409':
+          description: O feedback já foi publicado; após o pivô a saga só avança
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    get:
+      tags: [feedbacks]
+      summary: Feedback de uma correção (somente se publicado)
+      operationId: getFeedback
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Feedback publicado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback'
+              example:
+                requestId: 9f2c
+                studentId: b7e1
+                essayId: 41ab
+                status: PUBLISHED
+                totalScore: 640
+                publishedAt: '2026-10-20T14:02:40Z'
+                competencies:
+                  - { id: 1, score: 160, comment: 'Poucos desvios; atenção à regência verbal.' }
+                  - { id: 2, score: 120, comment: 'Tema compreendido, repertório pouco explorado.' }
+                  - { id: 3, score: 120, comment: 'Argumentos pouco desenvolvidos.' }
+                  - { id: 4, score: 160, comment: 'Boa articulação entre parágrafos.' }
+                  - { id: 5, score: 80, comment: 'Faltam agente e detalhamento da ação.' }
+        '404':
+          description: Inexistente, ainda em DRAFT ou CANCELLED
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/feedbacks/{requestId}/publication:
+    put:
+      tags: [saga]
+      summary: Publica o feedback (passo 4, pivô da SAGA)
+      description: >
+        Em uma única transação, muda o estado para PUBLISHED e grava o evento
+        FeedbackPublished na outbox. Idempotente.
+      operationId: publishFeedback
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204':
+          description: Feedback publicado
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: O feedback foi cancelado e não pode ser publicado
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/feedbacks:
+    get:
+      tags: [feedbacks]
+      summary: Feedbacks publicados de um aluno
+      operationId: listFeedbacksByStudent
+      parameters:
+        - name: studentId
+          in: query
+          required: true
+          schema: { type: string }
+          example: b7e1
+      responses:
+        '200':
+          description: Feedbacks publicados (lista vazia se não houver)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Feedback'
+
+components:
+  parameters:
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      description: Identificador único da solicitação de correção, da saga, da reserva e do feedback
+      schema: { type: string }
+      example: 9f2c
+
+  responses:
+    BadRequest:
+      description: Corpo ou parâmetros malformados
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    ProblemDetail:
+      type: object
+      description: Formato de erro RFC 9457 (Problem Details)
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+    DraftRequest:
+      type: object
+      required: [studentId, essayId, theme, text]
+      properties:
+        studentId: { type: string }
+        essayId: { type: string }
+        theme: { type: string }
+        text: { type: string }
+    CompetencyScore:
+      type: object
+      properties:
+        id: { type: integer, minimum: 1, maximum: 5, description: Competência do ENEM (1 a 5) }
+        score: { type: integer, minimum: 0, maximum: 200 }
+        comment: { type: string }
+    Feedback:
+      type: object
+      properties:
+        requestId: { type: string }
+        studentId: { type: string }
+        essayId: { type: string }
+        status: { type: string, enum: [DRAFT, PUBLISHED, CANCELLED] }
+        totalScore: { type: integer, minimum: 0, maximum: 1000 }
+        publishedAt: { type: string, format: date-time }
+        competencies:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/CompetencyScore'
