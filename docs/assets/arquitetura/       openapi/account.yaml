@@ -1,1 +1,326 @@
+openapi: 3.0.3
+info:
+  title: MentorIA — Account
+  version: 1.0.0
+  description: >
+    Alunos, professores, turmas, login com emissão do JWT e cota de correções.
+    As operações em /quota-reservations são comandos da SAGA de correção de
+    redação, chamados apenas pelo Assessment (orquestrador). Nenhum BFF as expõe.
+servers:
+  - url: http://account-service:8080
+    description: Rede interna
+tags:
+  - name: auth
+    description: Login (única rota pública, via gateway)
+  - name: students
+  - name: classes
+  - name: quota
+    description: Consulta da cota
+  - name: saga
+    description: Comandos da SAGA (somente Assessment)
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Autentica o usuário e emite o JWT
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: ana@escola.edu.br
+              password: "********"
+      responses:
+        '200':
+          description: Login realizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                accessToken: eyJhbGciOiJSUzI1NiIs...
+                tokenType: Bearer
+                expiresIn: 3600
+                user: { id: b7e1, name: Ana Souza, role: STUDENT }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Credenciais inválidas
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://mentoria.app/errors/invalid-credentials
+                title: Credenciais inválidas
+                status: 401
+                detail: E-mail ou senha incorretos.
+                instance: /api/v1/auth/login
+
+  /api/v1/students/{studentId}:
+    get:
+      tags: [students]
+      summary: Dados de um aluno
+      operationId: getStudent
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: Aluno encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Student'
+              example: { id: b7e1, name: Ana Souza, email: ana@escola.edu.br, classId: 3A }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/classes:
+    get:
+      tags: [classes]
+      summary: Turmas de um professor
+      operationId: listClassesByTeacher
+      parameters:
+        - name: teacherId
+          in: query
+          required: true
+          schema: { type: string }
+          example: p4d2
+      responses:
+        '200':
+          description: Turmas do professor (lista vazia se não houver)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClassSummary'
+              example:
+                - { id: 3A, name: 3º ano A, teacherId: p4d2, studentCount: 32 }
+
+  /api/v1/classes/{classId}/students:
+    get:
+      tags: [classes]
+      summary: Alunos de uma turma
+      operationId: listClassStudents
+      parameters:
+        - $ref: '#/components/parameters/ClassId'
+      responses:
+        '200':
+          description: Alunos da turma
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Student'
+              example:
+                - { id: b7e1, name: Ana Souza, email: ana@escola.edu.br, classId: 3A }
+                - { id: a3c9, name: Aluno exemplo, email: aluno@escola.edu.br, classId: 3A }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/students/{studentId}/quota:
+    get:
+      tags: [quota]
+      summary: Situação da cota de correções no mês corrente
+      operationId: getQuota
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: Cota do mês, com limite, reservadas e consumidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quota'
+              example: { studentId: b7e1, period: 2026-10, limit: 4, reserved: 1, consumed: 2, available: 1 }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/quota-reservations/{requestId}:
+    put:
+      tags: [saga]
+      summary: Reserva uma unidade da cota (passo 2 da SAGA)
+      description: >
+        Idempotente: repetir com o mesmo requestId devolve a reserva existente
+        (200) sem reservar outra unidade. RESERVED já conta contra o limite.
+      operationId: reserveQuota
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaReservationRequest'
+            example: { studentId: b7e1 }
+      responses:
+        '201':
+          description: Reserva criada
+          headers:
+            Location:
+              schema: { type: string }
+              example: /api/v1/quota-reservations/9f2c
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaReservation'
+              example: { requestId: 9f2c, studentId: b7e1, status: RESERVED, period: 2026-10 }
+        '200':
+          description: A reserva já existia (repetição do comando)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaReservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Cota esgotada; o Assessment marca a solicitação como REJECTED
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://mentoria.app/errors/quota-exhausted
+                title: Cota de correções esgotada
+                status: 409
+                detail: O aluno já usou as 4 correções de outubro de 2026.
+                instance: /api/v1/quota-reservations/9f2c
+    delete:
+      tags: [saga]
+      summary: Libera a reserva (compensação)
+      description: >
+        Idempotente: responde 204 mesmo se a reserva não existir, para que o
+        orquestrador possa compensar sem saber se o passo 2 ocorreu.
+      operationId: releaseQuota
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204':
+          description: Reserva liberada (RELEASED) ou inexistente
+        '409':
+          description: A reserva já foi consumida e não pode ser liberada
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/quota-reservations/{requestId}/confirmation:
+    put:
+      tags: [saga]
+      summary: Confirma o consumo da reserva (passo 5 da SAGA)
+      description: Idempotente. Muda o estado de RESERVED para CONSUMED.
+      operationId: confirmQuota
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204':
+          description: Consumo confirmado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    StudentId:
+      name: studentId
+      in: path
+      required: true
+      schema: { type: string }
+      example: b7e1
+    ClassId:
+      name: classId
+      in: path
+      required: true
+      schema: { type: string }
+      example: 3A
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      description: Identificador único da solicitação de correção, da saga, da reserva e do feedback
+      schema: { type: string }
+      example: 9f2c
+
+  responses:
+    BadRequest:
+      description: Corpo ou parâmetros malformados
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    ProblemDetail:
+      type: object
+      description: Formato de erro RFC 9457 (Problem Details)
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    LoginResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, description: Validade em segundos }
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            role: { type: string, enum: [STUDENT, TEACHER] }
+    Student:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        classId: { type: string }
+    ClassSummary:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        teacherId: { type: string }
+        studentCount: { type: integer }
+    Quota:
+      type: object
+      properties:
+        studentId: { type: string }
+        period: { type: string, description: Mês de referência (AAAA-MM) }
+        limit: { type: integer, example: 4 }
+        reserved: { type: integer }
+        consumed: { type: integer }
+        available: { type: integer }
+    QuotaReservationRequest:
+      type: object
+      required: [studentId]
+      properties:
+        studentId: { type: string }
+    QuotaReservation:
+      type: object
+      properties:
+        requestId: { type: string }
+        studentId: { type: string }
+        status: { type: string, enum: [RESERVED, CONSUMED, RELEASED] }
+        period: { type: string }
 
