@@ -1,0 +1,214 @@
+openapi: 3.0.3
+info:
+  title: MentorIA — Study Plan
+  version: 1.0.0
+  description: >
+    Planos, tarefas e progresso por competência, com CQRS. Os GET leem o modelo
+    de leitura (schema plan_read), com defasagem de até 2 s. As tarefas são
+    criadas pelo próprio serviço ao consumir o evento FeedbackPublished, por
+    isso não há rota de criação.
+servers:
+  - url: http://study-plan-service:8080
+    description: Rede interna
+tags:
+  - name: plan
+    description: Leitura (CQRS)
+  - name: tasks
+    description: Escrita
+
+paths:
+  /api/v1/students/{studentId}/plan:
+    get:
+      tags: [plan]
+      summary: Plano de estudos e tarefas do aluno (modelo de leitura)
+      operationId: getPlan
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: Plano do aluno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentPlan'
+              example:
+                studentId: b7e1
+                updatedAt: '2026-10-20T14:02:42Z'
+                tasks:
+                  - { id: t-18, title: 'Proposta de intervenção: 2 exercícios', competency: 5, status: PENDING }
+                  - { id: t-12, title: Revisar regência verbal, competency: 1, status: DONE }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/students/{studentId}/progress:
+    get:
+      tags: [plan]
+      summary: Progresso do aluno por competência (modelo de leitura)
+      operationId: getProgress
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: Progresso do aluno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProgress'
+              example:
+                studentId: b7e1
+                lastScore: 640
+                trend: up
+                weakestCompetency: 5
+                averageByCompetency:
+                  - { id: 1, average: 150 }
+                  - { id: 2, average: 125 }
+                  - { id: 3, average: 120 }
+                  - { id: 4, average: 155 }
+                  - { id: 5, average: 90 }
+                tasksDone: 5
+                tasksPending: 3
+                updatedAt: '2026-10-20T14:02:42Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/progress:
+    get:
+      tags: [plan]
+      summary: Resumo do progresso de vários alunos em uma chamada (modelo de leitura)
+      description: Usado pelo BFF Professor para montar a visão da turma sem uma chamada por aluno.
+      operationId: listProgress
+      parameters:
+        - name: studentIds
+          in: query
+          required: true
+          description: Identificadores separados por vírgula
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { type: string }
+          example: [b7e1, a3c9]
+      responses:
+        '200':
+          description: Progresso de cada aluno encontrado
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudentProgress'
+              example:
+                - { studentId: b7e1, lastScore: 640, trend: up, weakestCompetency: 5, tasksDone: 5, tasksPending: 3, updatedAt: '2026-10-20T14:02:42Z' }
+                - { studentId: a3c9, lastScore: 420, trend: down, weakestCompetency: 3, tasksDone: 1, tasksPending: 6, updatedAt: '2026-10-19T10:15:00Z' }
+
+  /api/v1/tasks/{taskId}:
+    patch:
+      tags: [tasks]
+      summary: Marca uma tarefa como concluída
+      description: >
+        Grava a mudança no modelo de escrita e o evento interno TaskCompleted na
+        mesma transação. O progresso reflete a mudança em até 2 s.
+      operationId: completeTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+          example: t-18
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
+            example: { status: DONE }
+      responses:
+        '200':
+          description: Tarefa concluída
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+              example: { id: t-18, title: 'Proposta de intervenção: 2 exercícios', competency: 5, status: DONE }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: A tarefa já está concluída
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  parameters:
+    StudentId:
+      name: studentId
+      in: path
+      required: true
+      schema: { type: string }
+      example: b7e1
+
+  responses:
+    BadRequest:
+      description: Corpo ou parâmetros malformados
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    ProblemDetail:
+      type: object
+      description: Formato de erro RFC 9457 (Problem Details)
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+    Task:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        competency: { type: integer, minimum: 1, maximum: 5 }
+        status: { type: string, enum: [PENDING, DONE] }
+    TaskUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [DONE] }
+    StudentPlan:
+      type: object
+      properties:
+        studentId: { type: string }
+        updatedAt: { type: string, format: date-time }
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+    StudentProgress:
+      type: object
+      properties:
+        studentId: { type: string }
+        lastScore: { type: integer, minimum: 0, maximum: 1000 }
+        trend: { type: string, enum: [up, down, stable] }
+        weakestCompetency: { type: integer, minimum: 1, maximum: 5 }
+        averageByCompetency:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer, minimum: 1, maximum: 5 }
+              average: { type: number }
+        tasksDone: { type: integer }
+        tasksPending: { type: integer }
+        updatedAt: { type: string, format: date-time }
