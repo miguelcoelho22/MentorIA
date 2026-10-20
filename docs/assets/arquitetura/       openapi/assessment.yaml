@@ -1,0 +1,312 @@
+openapi: 3.0.3
+info:
+  title: MentorIA — Assessment
+  version: 1.0.0
+  description: >
+    Temas, redações e solicitações de correção. Orquestrador da SAGA de
+    correção de redação. A solicitação de correção é o recurso com HATEOAS:
+    os links em _links mudam conforme o estado. O BFF Aluno reescreve os href
+    para as rotas que expõe ao app.
+servers:
+  - url: http://assessment-service:8080
+    description: Rede interna
+tags:
+  - name: themes
+  - name: essays
+  - name: correction-requests
+
+paths:
+  /api/v1/themes:
+    get:
+      tags: [themes]
+      summary: Lista os temas de redação
+      operationId: listThemes
+      responses:
+        '200':
+          description: Temas disponíveis
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Theme'
+              example:
+                - { id: t07, title: Desafios da mobilidade urbana no Brasil, description: Texto motivador sobre transporte público e direito à cidade. }
+
+  /api/v1/essays:
+    post:
+      tags: [essays]
+      summary: Envia uma redação
+      operationId: createEssay
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EssayCreate'
+            example:
+              themeId: t07
+              text: Segundo a Constituição Federal de 1988, o transporte é um direito social...
+      responses:
+        '201':
+          description: Redação salva
+          headers:
+            Location:
+              schema: { type: string }
+              example: /api/v1/essays/41ab
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Essay'
+              example: { id: 41ab, studentId: b7e1, themeId: t07, submittedAt: '2026-10-20T14:01:50Z' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags: [essays]
+      summary: Redações de um aluno
+      operationId: listEssaysByStudent
+      parameters:
+        - name: studentId
+          in: query
+          required: true
+          schema: { type: string }
+          example: b7e1
+      responses:
+        '200':
+          description: Redações do aluno (lista vazia se não houver)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Essay'
+              example:
+                - { id: 41ab, studentId: b7e1, themeId: t07, submittedAt: '2026-10-20T14:01:50Z' }
+
+  /api/v1/essays/{essayId}:
+    get:
+      tags: [essays]
+      summary: Detalhe de uma redação
+      operationId: getEssay
+      parameters:
+        - $ref: '#/components/parameters/EssayId'
+      responses:
+        '200':
+          description: Redação encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Essay'
+              example:
+                id: 41ab
+                studentId: b7e1
+                themeId: t07
+                text: Segundo a Constituição Federal de 1988, o transporte é um direito social...
+                submittedAt: '2026-10-20T14:01:50Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/essays/{essayId}/correction-requests:
+    post:
+      tags: [correction-requests]
+      summary: Solicita a correção da redação e inicia a SAGA
+      description: >
+        Responde 202 imediatamente; a SAGA continua em segundo plano. O cliente
+        acompanha o estado pelo endereço do cabeçalho Location.
+      operationId: requestCorrection
+      parameters:
+        - $ref: '#/components/parameters/EssayId'
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '202':
+          description: Solicitação aceita e em processamento
+          headers:
+            Location:
+              schema: { type: string }
+              example: /api/v1/correction-requests/9f2c
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorrectionRequest'
+              example:
+                id: 9f2c
+                essayId: 41ab
+                status: PROCESSING
+                requestedAt: '2026-10-20T14:02:11Z'
+                _links:
+                  self: { href: /api/v1/correction-requests/9f2c }
+                  essay: { href: /api/v1/essays/41ab }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Já existe uma solicitação em andamento para esta redação
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://mentoria.app/errors/correction-in-progress
+                title: Correção já em andamento
+                status: 409
+                detail: A redação 41ab já tem uma solicitação em PROCESSING.
+                instance: /api/v1/essays/41ab/correction-requests
+
+  /api/v1/correction-requests/{requestId}:
+    get:
+      tags: [correction-requests]
+      summary: Estado da solicitação de correção, com links HATEOAS
+      operationId: getCorrectionRequest
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+          example: 9f2c
+      responses:
+        '200':
+          description: Estado atual e links das ações possíveis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorrectionRequest'
+              examples:
+                processing:
+                  summary: PROCESSING — saga em andamento
+                  value:
+                    id: 9f2c
+                    essayId: 41ab
+                    status: PROCESSING
+                    requestedAt: '2026-10-20T14:02:11Z'
+                    _links:
+                      self: { href: /api/v1/correction-requests/9f2c }
+                      essay: { href: /api/v1/essays/41ab }
+                completed:
+                  summary: COMPLETED — feedback publicado
+                  value:
+                    id: 9f2c
+                    essayId: 41ab
+                    status: COMPLETED
+                    requestedAt: '2026-10-20T14:02:11Z'
+                    _links:
+                      self: { href: /api/v1/correction-requests/9f2c }
+                      essay: { href: /api/v1/essays/41ab }
+                      feedback: { href: /api/v1/feedbacks/9f2c }
+                      study-plan: { href: /api/v1/students/b7e1/plan }
+                rejected:
+                  summary: REJECTED — cota esgotada
+                  value:
+                    id: 9f2c
+                    essayId: 41ab
+                    status: REJECTED
+                    requestedAt: '2026-10-20T14:02:11Z'
+                    reason: QUOTA_EXHAUSTED
+                    _links:
+                      self: { href: /api/v1/correction-requests/9f2c }
+                      essay: { href: /api/v1/essays/41ab }
+                      quota: { href: /api/v1/students/b7e1/quota }
+                failed:
+                  summary: FAILED — falha técnica, já compensada
+                  value:
+                    id: 9f2c
+                    essayId: 41ab
+                    status: FAILED
+                    requestedAt: '2026-10-20T14:02:11Z'
+                    reason: AI_UNAVAILABLE
+                    _links:
+                      self: { href: /api/v1/correction-requests/9f2c }
+                      essay: { href: /api/v1/essays/41ab }
+                      retry: { href: /api/v1/essays/41ab/correction-requests }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    EssayId:
+      name: essayId
+      in: path
+      required: true
+      schema: { type: string }
+      example: 41ab
+    XUserId:
+      name: X-User-Id
+      in: header
+      required: true
+      description: Identificador do aluno, definido pelo gateway a partir do JWT
+      schema: { type: string }
+      example: b7e1
+
+  responses:
+    BadRequest:
+      description: Corpo ou parâmetros malformados
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    ProblemDetail:
+      type: object
+      description: Formato de erro RFC 9457 (Problem Details)
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+    Theme:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+    EssayCreate:
+      type: object
+      required: [themeId, text]
+      properties:
+        themeId: { type: string }
+        text: { type: string, minLength: 1 }
+    Essay:
+      type: object
+      properties:
+        id: { type: string }
+        studentId: { type: string }
+        themeId: { type: string }
+        text: { type: string, description: Presente no detalhe da redação }
+        submittedAt: { type: string, format: date-time }
+    Link:
+      type: object
+      properties:
+        href: { type: string }
+    CorrectionRequest:
+      type: object
+      properties:
+        id: { type: string, description: 'requestId, compartilhado com a saga, a reserva e o feedback' }
+        essayId: { type: string }
+        status:
+          type: string
+          enum: [PROCESSING, COMPLETED, REJECTED, FAILED]
+        requestedAt: { type: string, format: date-time }
+        reason:
+          type: string
+          enum: [QUOTA_EXHAUSTED, AI_UNAVAILABLE, PUBLICATION_ERROR]
+          description: Presente apenas em REJECTED e FAILED
+        _links:
+          type: object
+          description: >
+            PROCESSING: self, essay. COMPLETED: self, essay, feedback, study-plan.
+            REJECTED: self, essay, quota. FAILED: self, essay, retry (POST).
+          properties:
+            self: { $ref: '#/components/schemas/Link' }
+            essay: { $ref: '#/components/schemas/Link' }
+            feedback: { $ref: '#/components/schemas/Link' }
+            study-plan: { $ref: '#/components/schemas/Link' }
+            quota: { $ref: '#/components/schemas/Link' }
+            retry: { $ref: '#/components/schemas/Link' }
