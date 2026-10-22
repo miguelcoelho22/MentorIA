@@ -2,13 +2,25 @@
 
 ## 1. Decisão arquitetural
 
-A MentorIA adotará o padrão **Database per Service**, utilizando quatro instâncias separadas de PostgreSQL (`account-db`, `assessment-db`, `feedback-db` e `study-plan-db`), cada uma com seu próprio volume de armazenamento.
+A MentorIA adotará o padrão **Database per Service**, utilizando quatro instâncias separadas de PostgreSQL (`account-db`, `assessment-db`, `feedback-db` e `study-plan-db`), cada uma com seu próprio volume de armazenamento.Tecnologia justificada: A escolha do PostgreSQL se dá pela necessidade absoluta de suporte a transações ACID, recurso indispensável para que as operações de negócio e as tabelas de mensageria (outbox e domain_event) sejam gravadas simultaneamente de forma atômica.
 
 Para garantir a integração assíncrona entre o `Feedback` e o `Study Plan` sem risco de perda de dados ou inconsistência (*dual write*), será utilizado o **Padrão Outbox** no serviço `Feedback`.
 
 ---
 
-## 2. Como funciona
+## 2. Análise de Risco de Dual Write por Serviço
+
+Feedback: Possui risco crítico de dual write ao salvar a nota no banco e despachar o evento para a mensageria. Risco eliminado usando a tabela outbox na mesma transação local.
+
+Study Plan: Risco ao consumir do broker e atualizar a base. Mitigado através da idempotência no consumo, utilizando a tabela processed_events.
+
+Assessment: Risco análogo de falha no meio da orquestração síncrona. Contornado com a persistência atômica do estado de cada etapa (saga_states).
+
+Account: Não há risco de dual write, pois as reservas e consumos de cotas ocorrem exclusivamente dentro de transações transacionais no próprio banco.
+
+---
+
+## 3. Como funciona Independência dos Bancos e Tabelas Principais
 
 ### Independência dos Bancos e Tabelas Principais
 
