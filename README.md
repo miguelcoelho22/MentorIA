@@ -192,15 +192,12 @@ A documentação será atualizada conforme as frentes forem concluídas, mantend
 
 ---
 
-## Status do projeto
+**Status do projeto:** 🟡 Em desenvolvimento
 
-A **Parte 1 — Apresentação da proposta** foi concluída.
-
-Atualmente, a MentorIA está na **Parte 2 — Definição e documentação da arquitetura**, com as responsabilidades dos microsserviços, fluxos de comunicação e decisões técnicas sendo registradas no repositório.
-
-As próximas etapas contemplam a conteinerização com Docker e Kubernetes e a implementação funcional do sistema com integração à inteligência artificial.
-
-As instruções de execução serão adicionadas ao README conforme os serviços forem implementados.
+✅ Arquitetura e documentação — concluídas  
+⏳ Implementação e integração dos microsserviços — pendentes  
+⏳ Docker e Kubernetes — pendentes  
+⏳ Demonstração do sistema funcionando — pendente
 
 ---
 
