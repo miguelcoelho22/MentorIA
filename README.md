@@ -157,10 +157,10 @@ A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web 
 
 ### Andamento da documentação
 
-| Frente | Responsável | Situação |
+| Frente | Responsável | Status |
 |---|---|---|
-| 1 — Decomposição e Gateway | Gracielle | Concluída |
-| 2 — API REST e BFFs | Matheus | Parcialmente concluída |
+| 1 — Visão Geral, Serviços e Gateway | Gracielle | Concluída |
+| 2 — API REST e BFFs | Matheus | Concluída |
 | 3 — Dados, Outbox e CQRS | Marcos | Concluída |
 | 4 — SAGA | Miguel | Concluída |
 
