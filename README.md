@@ -176,13 +176,7 @@ A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web 
 
 - [04 — API REST e Contratos dos Serviços](docs/assets/arquitetura/04-api-rest.md)
 - [05 — Backend for Frontend (BFF)](docs/assets/arquitetura/05-bff.md)
-
-**Contratos OpenAPI:**
-- [Account](docs/assets/arquitetura/openapi/account.yaml)
-- [Assessment](docs/assets/arquitetura/openapi/assessment.yaml)
-- [Feedback](docs/assets/arquitetura/openapi/feedback.yaml)
-- [Study Plan](docs/assets/arquitetura/openapi/study-plan.yaml)
-
+- [Contratos OpenAPI — Account, Assessment, Feedback e Study Plan](docs/assets/arquitetura/openapi/)
 
 **Frente 3 — Dados, Outbox e CQRS**
 
