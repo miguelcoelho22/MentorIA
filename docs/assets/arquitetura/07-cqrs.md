@@ -4,7 +4,11 @@
 
 O `study-plan-service` utilizará o padrão **CQRS (Command Query Responsibility Segregation)**, separando a estrutura de escrita da estrutura de leitura em dois *schemas* independentes (`plan_write` e `plan_read`) dentro da mesma instância do PostgreSQL.
 
-A sincronização entre a escrita e a leitura ocorre de forma assíncrona, operando sob consistência eventual com uma defasagem máxima aceita de 2 segundos.
+Justificativa para a Separação:
+O serviço Study Plan se beneficia diretamente do CQRS devido à sua alta assimetria de carga. A gravação de dados (comandos) exige alta normalização e validações de regras de negócio estritas. Em contrapartida, as consultas (queries) feitas pelos painéis de alunos e professores são massivas e requisitam dados consolidados por aluno. A separação elimina a necessidade de JOINs pesados no banco de dados, entregando máxima velocidade de leitura.
+
+Definição da Defasagem (Consistência Eventual):
+A sincronização entre a escrita e a leitura ocorre de forma assíncrona. O modelo de leitura é atualizado com uma defasagem máxima aceitável de 2 segundos (lag tolerável), o que não afeta negativamente a tomada de decisão no contexto educacional.
 
 ---
 
