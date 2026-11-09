@@ -1,0 +1,26 @@
+[project]
+name = "ai-service"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "miguel_coelho", email = "miguel.coelho@estudante.ufla.br" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.162.2",
+    "langchain>=1.4.9",
+    "langchain-community>=0.4.2",
+    "langchain-openai>=1.7.4",
+    "pgvector>=0.5.1",
+    "psycopg>=3.3.8",
+    "python-dotenv>=1.2.4",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+ai-service = "ai_service:main"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
