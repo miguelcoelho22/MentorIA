@@ -1,0 +1,308 @@
+services:
+
+  # ==========================================
+  # INFRAESTRUTURA - BANCO DE DADOS
+  # ==========================================
+
+  postgres-account:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: account_db
+      POSTGRES_USER: account
+      POSTGRES_PASSWORD: ${ACCOUNT_DB_PASSWORD:-account_dev}
+    volumes:
+      - account_data:/var/lib/postgresql/data
+    networks:
+      - account-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U account -d account_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-assessment:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: assessment_db
+      POSTGRES_USER: assessment
+      POSTGRES_PASSWORD: ${ASSESSMENT_DB_PASSWORD:-assessment_dev}
+    volumes:
+      - assessment_data:/var/lib/postgresql/data
+    networks:
+      - assessment-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assessment -d assessment_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-feedback:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: feedback_db
+      POSTGRES_USER: feedback
+      POSTGRES_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback_dev}
+    volumes:
+      - feedback_data:/var/lib/postgresql/data
+    networks:
+      - feedback-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feedback -d feedback_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-study-plan:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: study_plan_db
+      POSTGRES_USER: studyplan
+      POSTGRES_PASSWORD: ${STUDY_PLAN_DB_PASSWORD:-studyplan_dev}
+    volumes:
+      - study_plan_data:/var/lib/postgresql/data
+    networks:
+      - study-plan-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studyplan -d study_plan_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-ai:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ai_db
+      POSTGRES_USER: ai
+      POSTGRES_PASSWORD: ${AI_DB_PASSWORD:-ai_dev}
+    volumes:
+      - ai_data:/var/lib/postgresql/data
+    networks:
+      - ai-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai -d ai_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ==========================================
+  # INFRAESTRUTURA - RABBITMQ
+  # ==========================================
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-mentoria}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-mentoria_dev}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:15672:15672"
+    networks:
+      - app
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ==========================================
+  # SERVIÇOS DE DOMÍNIO
+  # ==========================================
+
+  account:
+    build: ../../services/account
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-account:5432/account_db
+      SPRING_DATASOURCE_USERNAME: account
+      SPRING_DATASOURCE_PASSWORD: ${ACCOUNT_DB_PASSWORD:-account_dev}
+    depends_on:
+      postgres-account:
+        condition: service_healthy
+    networks:
+      - app
+      - account-db
+
+  assessment:
+    build: ../../services/assessment
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-assessment:5432/assessment_db
+      SPRING_DATASOURCE_USERNAME: assessment
+      SPRING_DATASOURCE_PASSWORD: ${ASSESSMENT_DB_PASSWORD:-assessment_dev}
+      ACCOUNT_SERVICE_URL: http://account:8080
+    depends_on:
+      postgres-assessment:
+        condition: service_healthy
+      account:
+        condition: service_started
+    networks:
+      - app
+      - assessment-db
+
+  feedback:
+    build: ../../services/feedback
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-feedback:5432/feedback_db
+      SPRING_DATASOURCE_USERNAME: feedback
+      SPRING_DATASOURCE_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback_dev}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-mentoria}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-mentoria_dev}
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      postgres-feedback:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+    networks:
+      - app
+      - feedback-db
+
+  study-plan:
+    build: ../../services/study-plan
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-study-plan:5432/study_plan_db
+      SPRING_DATASOURCE_USERNAME: studyplan
+      SPRING_DATASOURCE_PASSWORD: ${STUDY_PLAN_DB_PASSWORD:-studyplan_dev}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-mentoria}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-mentoria_dev}
+    depends_on:
+      postgres-study-plan:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app
+      - study-plan-db
+
+  # ==========================================
+  # AI SERVICE
+  # ==========================================
+
+  ai-service:
+    build: ../../ai-service
+    environment:
+      DATABASE_URL: postgresql://ai:${AI_DB_PASSWORD:-ai_dev}@postgres-ai:5432/ai_db
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    depends_on:
+      postgres-ai:
+        condition: service_healthy
+    networks:
+      - app
+      - ai-db
+
+  # ==========================================
+  # BFFs
+  # ==========================================
+
+  bff-student:
+    build: ../../bffs/student
+    environment:
+      ACCOUNT_SERVICE_URL: http://account:8080
+      ASSESSMENT_SERVICE_URL: http://assessment:8080
+      FEEDBACK_SERVICE_URL: http://feedback:8080
+      STUDY_PLAN_SERVICE_URL: http://study-plan:8080
+    depends_on:
+      - account
+      - assessment
+      - feedback
+      - study-plan
+    networks:
+      - app
+
+  bff-teacher:
+    build: ../../bffs/teacher
+    environment:
+      ACCOUNT_SERVICE_URL: http://account:8080
+      ASSESSMENT_SERVICE_URL: http://assessment:8080
+      FEEDBACK_SERVICE_URL: http://feedback:8080
+      STUDY_PLAN_SERVICE_URL: http://study-plan:8080
+    depends_on:
+      - account
+      - assessment
+      - feedback
+      - study-plan
+    networks:
+      - app
+
+  # ==========================================
+  # API GATEWAY
+  # ==========================================
+
+  gateway:
+    build: ../../gateway
+    ports:
+      - "8080:8080"
+    environment:
+      BFF_STUDENT_URL: http://bff-student:8080
+      BFF_TEACHER_URL: http://bff-teacher:8080
+    depends_on:
+      - bff-student
+      - bff-teacher
+    networks:
+      - edge
+      - app
+
+  # ==========================================
+  # CLIENTES REACT
+  # ==========================================
+
+  client-student:
+    build: ../../clients/student
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway
+    networks:
+      - edge
+
+  client-teacher:
+    build: ../../clients/teacher
+    ports:
+      - "3001:80"
+    depends_on:
+      - gateway
+    networks:
+      - edge
+
+# ==========================================
+# VOLUMES PERSISTENTES
+# ==========================================
+
+volumes:
+  account_data:
+  assessment_data:
+  feedback_data:
+  study_plan_data:
+  ai_data:
+  rabbitmq_data:
+
+# ==========================================
+# REDES
+# ==========================================
+
+networks:
+  edge:
+    driver: bridge
+
+  app:
+    driver: bridge
+
+  account-db:
+    internal: true
+
+  assessment-db:
+    internal: true
+
+  feedback-db:
+    internal: true
+
+  study-plan-db:
+    internal: true
+
+  ai-db:
+    internal: true
