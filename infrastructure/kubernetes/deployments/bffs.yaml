@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bff-student
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bff-student
+  template:
+    metadata:
+      labels:
+        app: bff-student
+    spec:
+      containers:
+        - name: bff-student
+          image: docker-bff-student:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bff-teacher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bff-teacher
+  template:
+    metadata:
+      labels:
+        app: bff-teacher
+    spec:
+      containers:
+        - name: bff-teacher
+          image: docker-bff-teacher:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10

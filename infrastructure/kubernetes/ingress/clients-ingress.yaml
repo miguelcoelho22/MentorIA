@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mentoria-clients
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /student(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: client-student
+                port:
+                  number: 80
+          - path: /teacher(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: client-teacher
+                port:
+                  number: 80

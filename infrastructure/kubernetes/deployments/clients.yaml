@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-student
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-student
+  template:
+    metadata:
+      labels:
+        app: client-student
+    spec:
+      containers:
+        - name: client-student
+          image: docker-client-student:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-teacher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-teacher
+  template:
+    metadata:
+      labels:
+        app: client-teacher
+    spec:
+      containers:
+        - name: client-teacher
+          image: docker-client-teacher:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10

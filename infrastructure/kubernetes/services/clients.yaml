@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-student
+spec:
+  selector:
+    app: client-student
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-teacher
+spec:
+  selector:
+    app: client-teacher
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

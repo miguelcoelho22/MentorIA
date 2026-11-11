@@ -1,0 +1,334 @@
+# ACCOUNT DATABASE
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-account
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-account
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-account
+spec:
+  serviceName: postgres-account
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-account
+  template:
+    metadata:
+      labels:
+        app: postgres-account
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: account_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: ACCOUNT_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: ACCOUNT_DB_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: account-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: account-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# ASSESSMENT DATABASE
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-assessment
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-assessment
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-assessment
+spec:
+  serviceName: postgres-assessment
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-assessment
+  template:
+    metadata:
+      labels:
+        app: postgres-assessment
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: assessment_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: ASSESSMENT_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: ASSESSMENT_DB_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: assessment-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: assessment-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# FEEDBACK DATABASE
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-feedback
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-feedback
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-feedback
+spec:
+  serviceName: postgres-feedback
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-feedback
+  template:
+    metadata:
+      labels:
+        app: postgres-feedback
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: feedback_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: FEEDBACK_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: FEEDBACK_DB_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: feedback-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: feedback-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# STUDY PLAN DATABASE
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-study-plan
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-study-plan
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-study-plan
+spec:
+  serviceName: postgres-study-plan
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-study-plan
+  template:
+    metadata:
+      labels:
+        app: postgres-study-plan
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: study_plan_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: STUDY_PLAN_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: STUDY_PLAN_DB_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: study-plan-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: study-plan-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# AI DATABASE
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-ai
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-ai
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-ai
+spec:
+  serviceName: postgres-ai
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-ai
+  template:
+    metadata:
+      labels:
+        app: postgres-ai
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: ai_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: AI_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: AI_DB_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: ai-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: ai-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

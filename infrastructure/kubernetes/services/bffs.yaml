@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bff-student
+spec:
+  selector:
+    app: bff-student
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bff-teacher
+spec:
+  selector:
+    app: bff-teacher
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

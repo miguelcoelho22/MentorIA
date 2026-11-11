@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+data:
+  BFF_STUDENT_URL: "http://bff-student:8080"
+  BFF_TEACHER_URL: "http://bff-teacher:8080"
