@@ -1,10 +1,10 @@
 services:
-
   # ==========================================
   # INFRAESTRUTURA - BANCO DE DADOS
   # ==========================================
 
   postgres-account:
+    container_name: mentoria-postgres-account
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: account_db
@@ -21,6 +21,7 @@ services:
       retries: 10
 
   postgres-assessment:
+    container_name: mentoria-postgres-assessment
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: assessment_db
@@ -37,6 +38,7 @@ services:
       retries: 10
 
   postgres-feedback:
+    container_name: mentoria-postgres-feedback
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: feedback_db
@@ -53,6 +55,7 @@ services:
       retries: 10
 
   postgres-study-plan:
+    container_name: mentoria-postgres-study-plan
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: study_plan_db
@@ -69,6 +72,7 @@ services:
       retries: 10
 
   postgres-ai:
+    container_name: mentoria-postgres-ai
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: ai_db
@@ -89,6 +93,7 @@ services:
   # ==========================================
 
   rabbitmq:
+    container_name: mentoria-rabbitmq
     image: rabbitmq:3-management
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-mentoria}
@@ -110,6 +115,7 @@ services:
   # ==========================================
 
   account:
+    container_name: mentoria-account
     build: ../../services/account
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-account:5432/account_db
@@ -123,6 +129,7 @@ services:
       - account-db
 
   assessment:
+    container_name: mentoria-assessment
     build: ../../services/assessment
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-assessment:5432/assessment_db
@@ -139,6 +146,7 @@ services:
       - assessment-db
 
   feedback:
+    container_name: mentoria-feedback
     build: ../../services/feedback
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-feedback:5432/feedback_db
@@ -161,6 +169,7 @@ services:
       - feedback-db
 
   study-plan:
+    container_name: mentoria-study-plan
     build: ../../services/study-plan
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-study-plan:5432/study_plan_db
@@ -184,6 +193,7 @@ services:
   # ==========================================
 
   ai-service:
+    container_name: mentoria-ai-service
     build: ../../ai-service
     environment:
       DATABASE_URL: postgresql://ai:${AI_DB_PASSWORD:-ai_dev}@postgres-ai:5432/ai_db
@@ -200,6 +210,7 @@ services:
   # ==========================================
 
   bff-student:
+    container_name: mentoria-bff-student
     build: ../../bffs/student
     environment:
       ACCOUNT_SERVICE_URL: http://account:8080
@@ -215,6 +226,7 @@ services:
       - app
 
   bff-teacher:
+    container_name: mentoria-bff-teacher
     build: ../../bffs/teacher
     environment:
       ACCOUNT_SERVICE_URL: http://account:8080
@@ -234,6 +246,7 @@ services:
   # ==========================================
 
   gateway:
+    container_name: mentoria-gateway
     build: ../../gateway
     ports:
       - "8080:8080"
@@ -252,6 +265,7 @@ services:
   # ==========================================
 
   client-student:
+    container_name: mentoria-client-student
     build: ../../clients/student
     ports:
       - "3000:80"
@@ -261,6 +275,7 @@ services:
       - edge
 
   client-teacher:
+    container_name: mentoria-client-teacher
     build: ../../clients/teacher
     ports:
       - "3001:80"
