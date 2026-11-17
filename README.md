@@ -192,11 +192,29 @@ A documentação será atualizada conforme as frentes forem concluídas, mantend
 
 ---
 
+## Containers e Kubernetes — Parte 3
+
+A MentorIA roda em containers Docker e é orquestrada por um cluster Kubernetes local, no Docker Desktop. São 16 componentes: 10 de aplicação, 5 bancos PostgreSQL e o RabbitMQ.
+
+▶️ **[Assistir ao vídeo da entrega](https://www.youtube.com/watch?v=cPyWZIi5WiY)**
+
+O vídeo está dividido em quatro partes:
+
+1. Containerização com Docker
+2. Docker Compose, redes e volumes
+3. Kubernetes: Deployments, Services e armazenamento
+4. ConfigMaps, Secrets, Ingress e escalabilidade
+
+- [Infraestrutura Docker Compose](infrastructure/docker/)
+- [Infraestrutura Kubernetes](infrastructure/kubernetes/)
+  
+---
+
 **Status do projeto:** 🟡 Em desenvolvimento
 
 ✅ Arquitetura e documentação — concluídas  
 ⏳ Implementação e integração dos microsserviços — pendentes  
-⏳ Docker e Kubernetes — pendentes  
+✅ Docker e Kubernetes — pendentes  
 ⏳ Demonstração do sistema funcionando — pendente
 
 ---
