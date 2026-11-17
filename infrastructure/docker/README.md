@@ -16,6 +16,19 @@ Para suportar o _Database per Service_, os volumes nomeados garantem que os dado
 
 - `account_data`, `assessment_data`, `feedback_data`, `study_plan_data`, `ai_data` e `rabbitmq_data`.
 
+## Credenciais
+
+Nenhuma senha fica no código. O compose lê usuários e senhas do arquivo `.env`
+desta pasta, que está no `.gitignore`. Antes de subir pela primeira vez:
+
+```bash
+cp .env.example .env
+# edite o .env e preencha as senhas
+```
+
+Se alguma variável obrigatória faltar, o `docker compose` para com a mensagem
+`defina <VARIÁVEL> no .env`.
+
 ## Comandos de Operação
 
 Subir a infraestrutura em background:
