@@ -24,7 +24,7 @@ Funcionalidades como simulados e questões objetivas poderão ser incorporadas f
 
 Todos os microsserviços operam em nível horizontal, sem hierarquia entre si, e seguem o padrão _Database per Service_: cada serviço possui seu próprio banco de dados e nenhum serviço acessa diretamente o banco de outro. Para garantir consistência entre o banco local e a mensageria, os serviços utilizam o padrão **Transactional Outbox** e controle de idempotência (`processed_events`). Além disso, o `Study Plan` adota o padrão **CQRS**, separando os modelos de escrita (`plan_write`) e leitura (`plan_read`).
 
-![Arquitetura Geral — MentorIA](docs/img/arquitetura-mentoria.png)
+![Arquitetura Geral — MentorIA](docs/img/arquitetura-mentoria.jpeg)
 
 <details>
 <summary>Ver código Mermaid do diagrama</summary>
