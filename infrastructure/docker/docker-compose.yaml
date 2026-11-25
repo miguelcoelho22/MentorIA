@@ -75,7 +75,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: study_plan_db
-      POSTGRES_USER: ${STUDY_PLAN_DB_USERv}
+      POSTGRES_USER: ${STUDY_PLAN_DB_USER}
       POSTGRES_PASSWORD: ${STUDY_PLAN_DB_PASSWORD}
     volumes:
       - study_plan_data:/var/lib/postgresql/data
@@ -154,8 +154,10 @@ services:
 
   account:
     container_name: mentoria-account
+    restart: on-failure
     build: ../../services/account
     environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-account:5432/account_db
       SPRING_DATASOURCE_USERNAME: ${ACCOUNT_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${ACCOUNT_DB_PASSWORD}
@@ -168,12 +170,15 @@ services:
 
   assessment:
     container_name: mentoria-assessment
+    restart: on-failure
     build: ../../services/assessment
     environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-assessment:5432/assessment_db
       SPRING_DATASOURCE_USERNAME: ${ASSESSMENT_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${ASSESSMENT_DB_PASSWORD}
       ACCOUNT_SERVICE_URL: http://account:8080
+      FEEDBACK_SERVICE_URL: http://feedback:8080
     depends_on:
       postgres-assessment:
         condition: service_healthy
@@ -185,8 +190,10 @@ services:
 
   feedback:
     container_name: mentoria-feedback
+    restart: on-failure
     build: ../../services/feedback
     environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-feedback:5432/feedback_db
       SPRING_DATASOURCE_USERNAME: ${FEEDBACK_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${FEEDBACK_DB_PASSWORD}
@@ -208,8 +215,10 @@ services:
 
   study-plan:
     container_name: mentoria-study-plan
+    restart: on-failure
     build: ../../services/study-plan
     environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-study-plan:5432/study_plan_db
       SPRING_DATASOURCE_USERNAME: ${STUDY_PLAN_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${STUDY_PLAN_DB_PASSWORD}
@@ -232,10 +241,14 @@ services:
 
   ai-service:
     container_name: mentoria-ai-service
+    restart: on-failure
     build: ../../ai-service
     environment:
-      DATABASE_URL: postgresql://${AI_DB_USER}:${AI_DB_PASSWORD}@postgres-ai:5432/ai_db
+      DATABASE_URL: postgresql://postgres-ai:5432/ai_db
+      PGUSER: ${AI_DB_USER}
+      PGPASSWORD: ${AI_DB_PASSWORD}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-${LLM_API_KEY:-}}
     depends_on:
       postgres-ai:
         condition: service_healthy
@@ -249,8 +262,10 @@ services:
 
   bff-student:
     container_name: mentoria-bff-student
+    restart: on-failure
     build: ../../bffs/student
     environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       ACCOUNT_SERVICE_URL: http://account:8080
       ASSESSMENT_SERVICE_URL: http://assessment:8080
       FEEDBACK_SERVICE_URL: http://feedback:8080
@@ -265,8 +280,10 @@ services:
 
   bff-teacher:
     container_name: mentoria-bff-teacher
+    restart: on-failure
     build: ../../bffs/teacher
     environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       ACCOUNT_SERVICE_URL: http://account:8080
       ASSESSMENT_SERVICE_URL: http://assessment:8080
       FEEDBACK_SERVICE_URL: http://feedback:8080
@@ -285,10 +302,12 @@ services:
 
   gateway:
     container_name: mentoria-gateway
+    restart: on-failure
     build: ../../gateway
     ports:
       - "8080:8080"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       BFF_STUDENT_URL: http://bff-student:8080
       BFF_TEACHER_URL: http://bff-teacher:8080
     depends_on:
@@ -304,6 +323,7 @@ services:
 
   client-student:
     container_name: mentoria-client-student
+    restart: on-failure
     build: ../../clients/student
     ports:
       - "3000:80"
@@ -314,6 +334,7 @@ services:
 
   client-teacher:
     container_name: mentoria-client-teacher
+    restart: on-failure
     build: ../../clients/teacher
     ports:
       - "3001:80"
