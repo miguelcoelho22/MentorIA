@@ -19,4 +19,13 @@ public class SagaConsumer {
 
         sagaService.iniciarSaga(event);
     }
+
+    @RabbitListener(queues = RabbitMQConfig.COTA_VALIDADA_QUEUE)
+    public void receberResultadoCota(CotaValidadaEvent event) {
+
+        System.out.println("Resultado da validação de cota: "
+                + event.aprovada());
+
+        sagaService.processarResultadoCota(event);
+    }
 }

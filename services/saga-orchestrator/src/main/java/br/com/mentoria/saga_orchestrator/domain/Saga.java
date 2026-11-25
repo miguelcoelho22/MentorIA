@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "sagas")
@@ -17,9 +18,9 @@ public class Saga {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long redacaoId;
+    private UUID redacaoId;
 
-    private Long alunoId;
+    private UUID alunoId;
 
     @Enumerated(EnumType.STRING)
     private SagaStatus status;

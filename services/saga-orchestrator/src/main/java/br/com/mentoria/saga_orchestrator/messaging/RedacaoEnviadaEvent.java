@@ -1,7 +1,9 @@
 package br.com.mentoria.saga_orchestrator.messaging;
 
+import java.util.UUID;
+
 public record RedacaoEnviadaEvent(
-        Long redacaoId,
-        Long alunoId
+        UUID redacaoId,
+        UUID alunoId
 ) {
 }

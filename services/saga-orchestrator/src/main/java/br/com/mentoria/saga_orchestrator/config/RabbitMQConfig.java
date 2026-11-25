@@ -15,6 +15,10 @@ public class RabbitMQConfig {
 
     public static final String VALIDAR_COTA_QUEUE = "account.validar.cota";
 
+    public static final String COTA_VALIDADA_QUEUE = "saga.cota.validada";
+
+    public static final String PROCESSAR_REDACAO_QUEUE = "ai.processar.redacao";
+
     @Bean
     public DirectExchange sagaExchange() {
         return new DirectExchange(SAGA_EXCHANGE);
@@ -49,5 +53,31 @@ public class RabbitMQConfig {
     @Bean
     public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
         return new RabbitTemplate(connectionFactory);
+    }
+
+    @Bean
+    public Queue cotaValidadaQueue() {
+        return new Queue(COTA_VALIDADA_QUEUE, true);
+    }
+
+    @Bean
+    public Binding cotaValidadaBinding() {
+        return BindingBuilder
+                .bind(cotaValidadaQueue())
+                .to(sagaExchange())
+                .with("saga.cota.validada");
+    }
+
+    @Bean
+    public Queue processarRedacaoQueue() {
+        return new Queue(PROCESSAR_REDACAO_QUEUE, true);
+    }
+
+    @Bean
+    public Binding processarRedacaoBinding() {
+        return BindingBuilder
+                .bind(processarRedacaoQueue())
+                .to(sagaExchange())
+                .with("ai.processar.redacao");
     }
 }
