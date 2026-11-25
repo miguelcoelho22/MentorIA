@@ -1,5 +1,6 @@
 package br.com.mentoria.account;
 
+import br.com.mentoria.account.QuotaReservationService.Status;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
@@ -14,27 +15,23 @@ public class CotaConsumer {
 
     @RabbitListener(queues = RabbitMQConfig.VALIDAR_COTA_QUEUE)
     public void validarCota(ValidarCotaCommand command) {
-
+        CotaValidadaEvent event;
         try {
-            var resultado = quotaReservationService.reserve(
+            var reserva = quotaReservationService.reserve(
                     command.requestId(),
                     command.studentId()
-            );
-
-            var event = new CotaValidadaEvent(
+            ).reservation();
+            boolean aprovada = reserva.status() == Status.RESERVED;
+            event = new CotaValidadaEvent(
                     command.sagaId(),
                     command.requestId(),
                     command.studentId(),
-                    true,
-                    resultado.reservation().period(),
-                    null
+                    aprovada,
+                    aprovada ? reserva.period() : null,
+                    aprovada ? null : "RESERVA_JA_FINALIZADA"
             );
-
-            cotaProducer.publicarResultado(event);
-
         } catch (ResponseStatusException exception) {
-
-            var event = new CotaValidadaEvent(
+            event = new CotaValidadaEvent(
                     command.sagaId(),
                     command.requestId(),
                     command.studentId(),
@@ -42,8 +39,7 @@ public class CotaConsumer {
                     null,
                     exception.getReason()
             );
-
-            cotaProducer.publicarResultado(event);
         }
+        cotaProducer.publicarResultado(event);
     }
 }

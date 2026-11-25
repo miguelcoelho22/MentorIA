@@ -46,6 +46,12 @@ class FeedbackService {
         lockRequest(requestId);
         StoredFeedback existing = find(requestId);
         if (existing != null) {
+            if (existing.status() != Status.DRAFT) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "O feedback já foi publicado ou cancelado.");
+            }
+            if (!existing.studentId().equals(request.studentId()) || !existing.essayId().equals(request.essayId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "O rascunho pertence a outro aluno ou a outra redação.");
+            }
             return new DraftResult(view(existing), false);
         }
 

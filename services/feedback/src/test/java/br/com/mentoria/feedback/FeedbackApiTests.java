@@ -83,6 +83,8 @@ class FeedbackApiTests {
 
         mvc.perform(put(PATH + "/{id}/publication", id)).andExpect(status().isNoContent());
         mvc.perform(put(PATH + "/{id}/publication", id)).andExpect(status().isNoContent());
+        create(id).andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
         mvc.perform(get(PATH + "/{id}", id)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PUBLISHED")).andExpect(jsonPath("$.publishedAt", endsWith("Z")));
         mvc.perform(get(PATH).param("studentId", STUDENT.toString())).andExpect(status().isOk())
@@ -112,10 +114,31 @@ class FeedbackApiTests {
         create(id).andExpect(status().isCreated());
         mvc.perform(delete(PATH + "/{id}", id)).andExpect(status().isNoContent());
         mvc.perform(delete(PATH + "/{id}", id)).andExpect(status().isNoContent());
-        create(id).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
+        create(id).andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
         mvc.perform(get(PATH + "/{id}", id)).andExpect(status().isNotFound());
         mvc.perform(put(PATH + "/{id}/publication", id)).andExpect(status().isConflict());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE request_id = ?", Integer.class, id)).isZero();
+    }
+
+    @Test
+    @Transactional
+    void rejectsDraftRetriesForAnotherStudentOrEssay() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(analysis.analyze(DRAFT)).thenReturn(SCORES);
+        create(id).andExpect(status().isCreated());
+
+        var otherStudent = new DraftRequest(UUID.randomUUID(), DRAFT.essayId(), DRAFT.theme(), DRAFT.text());
+        var otherEssay = new DraftRequest(DRAFT.studentId(), UUID.randomUUID(), DRAFT.theme(), DRAFT.text());
+        for (DraftRequest conflicting : List.of(otherStudent, otherEssay)) {
+            mvc.perform(put(PATH + "/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(conflicting)))
+                    .andExpect(status().isConflict())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+        }
+
+        create(id).andExpect(status().isOk()).andExpect(jsonPath("$.requestId").value(id.toString()));
+        verify(analysis).analyze(DRAFT);
     }
 
     @Test

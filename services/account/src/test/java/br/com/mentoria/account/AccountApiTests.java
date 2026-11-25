@@ -18,6 +18,8 @@ import java.util.UUID;
 import com.jayway.jsonpath.JsonPath;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,7 +77,25 @@ class AccountApiTests {
         var jwt = SignedJWT.parse(token);
         var claims = jwt.getJWTClaimsSet();
         assertThat(jwt.getHeader().getAlgorithm()).isEqualTo(JWSAlgorithm.RS256);
-        assertThat(jwt.verify(new RSASSAVerifier((RSAPublicKey) KEY_PAIR.getPublic()))).isTrue();
+        String kid = jwt.getHeader().getKeyID();
+        assertThat(kid).isNotBlank();
+        for (String path : new String[] {"/api/v1/auth/jwks", "/.well-known/jwks.json"}) {
+            var jwks = mvc.perform(get(path))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.keys.length()").value(1))
+                    .andExpect(jsonPath("$.keys[0].kty").value("RSA"))
+                    .andExpect(jsonPath("$.keys[0].alg").value("RS256"))
+                    .andExpect(jsonPath("$.keys[0].use").value("sig"))
+                    .andExpect(jsonPath("$.keys[0].kid").value(kid))
+                    .andExpect(jsonPath("$.keys[0].n").isString())
+                    .andExpect(jsonPath("$.keys[0].e").isString())
+                    .andReturn().getResponse();
+            var key = (RSAKey) JWKSet.parse(jwks.getContentAsString()).getKeyByKeyId(kid);
+            assertThat(key.isPrivate()).isFalse();
+            assertThat(key.toRSAPublicKey()).isEqualTo((RSAPublicKey) KEY_PAIR.getPublic());
+            assertThat(jwt.verify(new RSASSAVerifier(key))).isTrue();
+        }
         assertThat(claims.getSubject()).isEqualTo(ANA.toString());
         assertThat(claims.getStringClaim("role")).isEqualTo("STUDENT");
         assertThat(claims.getExpirationTime().getTime() - claims.getIssueTime().getTime()).isEqualTo(3_600_000);
