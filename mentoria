@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_DIR="$ROOT/infrastructure/docker"
+K8S_DIR="$ROOT/infrastructure/kubernetes"
+GATEWAY_URL="${GATEWAY_URL:-http://localhost:8080}"
+INGRESS_NGINX_URL="https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.1/deploy/static/provider/cloud/deploy.yaml"
+
+STUDENT_EMAIL="ana@demo.mentoria.test"
+TEACHER_EMAIL="professor@demo.mentoria.test"
+DEMO_PASSWORD="${DEMO_PASSWORD:-MentorIA-demo-2026!}"
+
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+info() { printf '\033[36m▸\033[0m %s\n' "$*"; }
+ok()   { printf '\033[32m✔\033[0m %s\n' "$*"; }
+warn() { printf '\033[33m!\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[31m✘\033[0m %s\n' "$*" >&2; exit 1; }
+
+compose() { docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_DIR/docker-compose.yaml" "$@"; }
+
+ensure_env() {
+  local env="$COMPOSE_DIR/.env" example="$COMPOSE_DIR/.env.example"
+  if [[ ! -f "$env" ]]; then
+    cp "$example" "$env"
+    warn "Criei $env a partir do .env.example. Revise as senhas se quiser."
+  fi
+  local missing=()
+  while IFS='=' read -r key _; do
+    [[ -z "$key" || "$key" == \#* ]] && continue
+    grep -q "^${key}=" "$env" || missing+=("$key")
+  done < "$example"
+  if (( ${#missing[@]} )); then
+    warn "Faltam no .env: ${missing[*]} (copie do .env.example)."
+  fi
+}
+
+require_docker() {
+  command -v docker >/dev/null || die "Docker não encontrado."
+  docker info >/dev/null 2>&1 || die "O Docker não está rodando. Abra o Docker Desktop."
+}
+
+wait_gateway() {
+  info "Aguardando o gateway em $GATEWAY_URL ..."
+  for _ in $(seq 1 60); do
+    if curl -sf -o /dev/null "$GATEWAY_URL/actuator/health/readiness"; then
+      ok "Gateway pronto."
+      return 0
+    fi
+    sleep 3
+  done
+  die "O gateway não ficou pronto em 3 minutos. Veja: ./mentoria logs gateway"
+}
+
+token_for() {
+  local email="$1" response
+  response=$(curl -s -X POST "$GATEWAY_URL/api/v1/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$email\",\"password\":\"$DEMO_PASSWORD\"}")
+  python3 -c 'import sys,json
+try: print(json.load(sys.stdin)["accessToken"])
+except Exception: sys.exit(1)' <<<"$response" || die "Login falhou para $email: $response"
+}
+
+status_of() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+
+check() {
+  local name="$1" expected="$2" got="$3"
+  if [[ "$got" == "$expected" ]]; then ok "$name → $got"; else warn "$name → $got (esperado $expected)"; FAILED=1; fi
+}
+
+cmd_smoke() {
+  FAILED=0
+  bold "Smoke test do gateway ($GATEWAY_URL)"
+  local student teacher
+  student=$(token_for "$STUDENT_EMAIL"); ok "Login do aluno"
+  teacher=$(token_for "$TEACHER_EMAIL"); ok "Login do professor"
+
+  check "Sem token em /student/home" 401 "$(status_of "$GATEWAY_URL/api/v1/student/home")"
+  check "Aluno em /teacher/classes" 403 "$(status_of -H "Authorization: Bearer $student" "$GATEWAY_URL/api/v1/teacher/classes")"
+  check "Professor em /student/home" 403 "$(status_of -H "Authorization: Bearer $teacher" "$GATEWAY_URL/api/v1/student/home")"
+  check "Rota interna da SAGA" 403 "$(status_of -X PUT -H "Authorization: Bearer $student" "$GATEWAY_URL/api/v1/quota-reservations/x")"
+
+  local headers
+  headers=$(curl -s -D - -o /dev/null -H "Authorization: Bearer $student" "$GATEWAY_URL/api/v1/student/home")
+  if grep -qi '^x-correlation-id' <<<"$headers" && grep -qi '^x-ratelimit-remaining' <<<"$headers"; then
+    ok "Aluno em /student/home chegou ao BFF ($(head -1 <<<"$headers" | tr -d '\r'))"
+  else
+    warn "Aluno em /student/home não passou pelo gateway como esperado"; FAILED=1
+  fi
+
+  local uri="$GATEWAY_URL/api/v1/student/essays/smoke-$RANDOM/correction-requests" third
+  status_of -X POST -H "Authorization: Bearer $student" "$uri" >/dev/null
+  status_of -X POST -H "Authorization: Bearer $student" "$uri" >/dev/null
+  third=$(status_of -X POST -H "Authorization: Bearer $student" "$uri")
+  check "3º pedido de correção no mesmo minuto" 429 "$third"
+
+  (( FAILED )) && die "Algum teste falhou." || ok "Tudo certo."
+}
+
+cmd_k8s() {
+  local sub="${1:-help}"; shift || true
+  command -v kubectl >/dev/null || die "kubectl não encontrado."
+  case "$sub" in
+    up)
+      kubectl get nodes >/dev/null 2>&1 || die "Kubernetes não responde. Ligue-o no Docker Desktop (Settings → Kubernetes)."
+      require_docker; ensure_env
+      info "Construindo as imagens..."
+      compose build
+      if ! kubectl get ns ingress-nginx >/dev/null 2>&1; then
+        info "Instalando o Ingress NGINX..."
+        kubectl apply -f "$INGRESS_NGINX_URL"
+        kubectl wait -n ingress-nginx --for=condition=ready pod \
+          -l app.kubernetes.io/component=controller --timeout=180s
+      fi
+      (cd "$ROOT" && bash "$K8S_DIR/deploy.sh")
+      info "Reiniciando os pods para usar as imagens novas..."
+      kubectl -n mentoria rollout restart deployment
+      ok "Pronto. API em http://localhost/api, apps em http://localhost/student/ e /teacher/"
+      ;;
+    down)   kubectl delete namespace mentoria ;;
+    status) kubectl -n mentoria get pods,svc,ingress ;;
+    logs)   kubectl -n mentoria logs -f "deployment/${1:?informe o deployment, ex.: gateway}" ;;
+    smoke)  GATEWAY_URL="http://localhost" cmd_smoke ;;
+    *) cat <<EOF
+Uso: ./mentoria k8s <up|down|status|logs <deployment>|smoke>
+EOF
+    ;;
+  esac
+}
+
+cmd_help() {
+  cat <<EOF
+$(bold "MentorIA — atalhos locais")
+
+Docker Compose:
+  ./mentoria start [serviço...]   Sobe tudo (ou só os serviços indicados), reconstruindo as imagens
+  ./mentoria gateway              Sobe só o necessário para testar o gateway (Account + BFFs + Gateway)
+  ./mentoria stop                 Para os containers (mantém os dados)
+  ./mentoria restart <serviço>    Reconstrói e reinicia um serviço
+  ./mentoria reset                Derruba tudo e APAGA os volumes (bancos zerados)
+  ./mentoria ps                   Lista os containers
+  ./mentoria logs [serviço]       Acompanha os logs
+  ./mentoria token [student|teacher]  Faz login e imprime o JWT
+  ./mentoria smoke                Testa o gateway (401, 403, roteamento, 429)
+  ./mentoria test                 Roda os testes Maven do gateway
+
+Kubernetes (Docker Desktop):
+  ./mentoria k8s up|down|status|logs <deployment>|smoke
+
+Endereços: gateway $GATEWAY_URL · aluno http://localhost:3000/student/ · professor http://localhost:3001/teacher/
+EOF
+}
+
+main() {
+  local cmd="${1:-help}"; shift || true
+  case "$cmd" in
+    start|up)
+      require_docker; ensure_env
+      compose up -d --build "$@"
+      [[ $# -eq 0 || " $* " == *" gateway "* ]] && wait_gateway
+      cmd_help | tail -1
+      ;;
+    gateway)
+      require_docker; ensure_env
+      compose up -d --build postgres-account account
+      compose up -d --build --no-deps bff-student bff-teacher gateway
+      wait_gateway
+      info "Rode ./mentoria smoke para testar."
+      ;;
+    stop|down)   compose down ;;
+    restart)     [[ $# -gt 0 ]] || die "Informe o serviço, ex.: ./mentoria restart gateway"
+                 compose up -d --build --no-deps "$@" ;;
+    reset)
+      read -r -p "Isso apaga TODOS os dados dos bancos. Continuar? [s/N] " answer
+      [[ "$answer" =~ ^[sS]$ ]] && compose down -v || info "Cancelado."
+      ;;
+    ps|status)   compose ps ;;
+    logs)        compose logs -f --tail=100 "$@" ;;
+    token)
+      case "${1:-student}" in
+        student|aluno)     token_for "$STUDENT_EMAIL" ;;
+        teacher|professor) token_for "$TEACHER_EMAIL" ;;
+        *) die "Use: ./mentoria token [student|teacher]" ;;
+      esac
+      ;;
+    smoke)       cmd_smoke ;;
+    test)        (cd "$ROOT/gateway" && mvn -q test) && ok "Testes do gateway passaram." ;;
+    k8s)         cmd_k8s "$@" ;;
+    help|-h|--help) cmd_help ;;
+    *) warn "Comando desconhecido: $cmd"; cmd_help; exit 1 ;;
+  esac
+}
+
+main "$@"

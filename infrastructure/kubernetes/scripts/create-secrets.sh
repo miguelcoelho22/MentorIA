@@ -5,14 +5,17 @@ set -e
 NAMESPACE="mentoria"
 
 # Carrega as variáveis do arquivo .env
-if [ ! -f ".env" ]; then
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE=".env"
+[ -f "$ENV_FILE" ] || ENV_FILE="$SCRIPT_DIR/../../docker/.env"
+if [ ! -f "$ENV_FILE" ]; then
     echo "Erro: arquivo .env não encontrado!"
-    echo "Copie .env.example para .env e configure as credenciais."
+    echo "Copie infrastructure/docker/.env.example para infrastructure/docker/.env e configure as credenciais."
     exit 1
 fi
 
 set -a
-source .env
+source "$ENV_FILE"
 set +a
 
 # Cria os Secrets dos bancos de dados
