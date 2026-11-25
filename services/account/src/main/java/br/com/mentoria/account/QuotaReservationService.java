@@ -15,7 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 class QuotaReservationService {
 
-    private static final int MONTHLY_LIMIT = 4;
+    static final int MONTHLY_LIMIT = 4;
 
     private final JdbcTemplate jdbc;
 
