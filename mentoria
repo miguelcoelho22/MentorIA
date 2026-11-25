@@ -124,6 +124,25 @@ EOF
     -H 'Content-Type: application/json' -d "$body" | python3 -m json.tool --no-ensure-ascii
 }
 
+cmd_ai_plan() {
+  local body
+  body=$(MESSAGE="${1:-Tenho 8 horas por semana e a prova é daqui a 6 semanas. Vou mal em matemática e física e quero melhorar a proposta de intervenção da redação.}" python3 - <<'EOF'
+import json, os, uuid
+print(json.dumps({
+    "studentId": str(uuid.uuid4()),
+    "message": os.environ["MESSAGE"],
+    "progress": {"averageByCompetency": [{"id": 1, "average": 150}, {"id": 2, "average": 130},
+                                         {"id": 3, "average": 120}, {"id": 4, "average": 140},
+                                         {"id": 5, "average": 80}], "weakestCompetency": 5},
+    "areaLevels": {"matematica": "basico", "natureza": "intermediario"},
+}))
+EOF
+)
+  info "Pedindo o plano de estudos (pode levar alguns segundos)..."
+  docker run --rm --network docker_app curlimages/curl:8.11.1 -s -X POST http://ai-service:8000/api/v1/study-plans/suggestions \
+    -H 'Content-Type: application/json' -d "$body" | python3 -m json.tool --no-ensure-ascii
+}
+
 cmd_k8s() {
   local sub="${1:-help}"; shift || true
   command -v kubectl >/dev/null || die "kubectl não encontrado."
@@ -175,6 +194,8 @@ Docker Compose:
   ./mentoria ai-analyze           Envia uma redação de exemplo para a análise com IA
   ./mentoria ai-import            Baixa o Essay-BR e regenera o corpus de redações reais e o conjunto de avaliação
   ./mentoria ai-eval [N]          Compara as notas da IA com as notas humanas de N redações (padrão 20), com e sem RAG
+  ./mentoria ai-plan ["pedido"]   Pede um plano de estudos à IA (com um pedido de exemplo se nenhum for informado)
+  ./mentoria ai-plan-eval         Testa o plano de estudos com pedidos legítimos e tentativas de ataque
 
 Kubernetes (Docker Desktop):
   ./mentoria k8s up|down|status|logs <deployment>|smoke
@@ -222,6 +243,8 @@ main() {
     ai-analyze)  require_docker; cmd_ai_analyze ;;
     ai-import)   python3 -I "$ROOT/ai-service/scripts/import_essay_br.py" "$@" && info "Rode ./mentoria restart ai-service para vetorizar o corpus novo." ;;
     ai-eval)     compose exec ai-service python -m ai_service.evaluate --limit "${1:-20}" ;;
+    ai-plan)     require_docker; cmd_ai_plan "${1:-}" ;;
+    ai-plan-eval) compose exec ai-service python -m ai_service.plan_eval "$@" ;;
     k8s)         cmd_k8s "$@" ;;
     help|-h|--help) cmd_help ;;
     *) warn "Comando desconhecido: $cmd"; cmd_help; exit 1 ;;

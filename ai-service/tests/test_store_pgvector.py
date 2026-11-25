@@ -35,3 +35,25 @@ def test_search_returns_nearest_chunks_of_the_competency():
     finally:
         store.remove_sources(["teste.md"])
     assert "teste.md" not in store.source_hashes()
+
+
+def test_activity_search_filters_by_area_subject_and_competency():
+    store = VectorStore(DATABASE_URL, dimensions=3)
+    store.ensure_schema()
+    store.upsert_activities([
+        ("fis-perto", "h", "natureza", "fisica", None, [1, 0, 0]),
+        ("fis-longe", "h", "natureza", "fisica", None, [0, 1, 0]),
+        ("qui-perto", "h", "natureza", "quimica", None, [1, 0, 0]),
+        ("red-c5", "h", "redacao", "redacao", 5, [1, 0, 0]),
+        ("red-c1", "h", "redacao", "redacao", 1, [1, 0, 0]),
+    ])
+    ids = ["fis-perto", "fis-longe", "qui-perto", "red-c5", "red-c1"]
+    try:
+        assert store.search_activities([0.9, 0.1, 0], "natureza", "fisica", None, 5) == ["fis-perto", "fis-longe"]
+        assert set(store.search_activities([1, 0, 0], "natureza", None, None, 5)) == {"fis-perto", "fis-longe",
+                                                                                       "qui-perto"}
+        assert store.search_activities([1, 0, 0], "redacao", "redacao", 5, 5) == ["red-c5"]
+        assert store.activity_hashes()["fis-perto"] == "h"
+    finally:
+        store.delete_activities(ids)
+    assert not set(ids) & set(store.activity_hashes())

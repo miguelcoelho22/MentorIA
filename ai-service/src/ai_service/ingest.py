@@ -5,6 +5,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from ai_service.catalog import Activity, load_catalog
 from ai_service.config import Settings
 from ai_service.corpus import Chunk, load_sources
 from ai_service.providers import EmbedDocuments, document_embedder, embedding_fingerprint
@@ -65,6 +66,39 @@ def ingest(store: VectorStore, embed_documents: EmbedDocuments, corpus_dir: Path
     return IngestReport(ingested, unchanged, removed)
 
 
+@dataclass(frozen=True)
+class CatalogReport:
+    embedded: int
+    unchanged: int
+    removed: int
+
+
+def activity_hash(activity: Activity, fingerprint: str) -> str:
+    payload = [fingerprint, activity.area, activity.subject, activity.competency, activity.search_text]
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+
+
+def sync_catalog(store: VectorStore, embed_documents: EmbedDocuments, catalog: dict[str, Activity],
+                 fingerprint: str, batch_size: int) -> CatalogReport:
+    store.ensure_schema()
+    stored = store.activity_hashes()
+    wanted = {activity.id: activity_hash(activity, fingerprint) for activity in catalog.values()}
+    removed = sorted(set(stored) - set(wanted))
+    store.delete_activities(removed)
+    missing = [catalog[i] for i, h in wanted.items() if stored.get(i) != h]
+    for start in range(0, len(missing), batch_size):
+        batch = missing[start:start + batch_size]
+        embeddings = embed_documents([activity.search_text for activity in batch])
+        store.upsert_activities([(a.id, wanted[a.id], a.area, a.subject, a.competency, e)
+                                 for a, e in zip(batch, embeddings, strict=True)])
+    return CatalogReport(len(missing), len(wanted) - len(missing), len(removed))
+
+
+def run_catalog(settings: Settings, store: VectorStore) -> CatalogReport:
+    return sync_catalog(store, document_embedder(settings), load_catalog(settings.catalog_dir),
+                        embedding_fingerprint(settings), settings.embedding_batch)
+
+
 def run(settings: Settings, store: VectorStore) -> IngestReport:
     return ingest(store, document_embedder(settings), settings.corpus_dir,
                   embedding_fingerprint(settings), settings.embedding_batch)
@@ -77,7 +111,11 @@ def main() -> int:
         print("Defina a chave do provedor (OPENAI_API_KEY ou GEMINI_API_KEY) para gerar os embeddings.",
               file=sys.stderr)
         return 1
-    report = run(settings, VectorStore(settings.database_url, settings.embedding_dimensions))
+    store = VectorStore(settings.database_url, settings.embedding_dimensions)
+    catalog = run_catalog(settings, store)
+    report = run(settings, store)
+    print(f"Catálogo de atividades: {catalog.embedded} vetorizadas | {catalog.unchanged} sem mudança"
+          f" | {catalog.removed} removidas")
     print(f"Ingeridos: {len(report.ingested)} | sem mudança: {len(report.unchanged)} | removidos: {len(report.removed)}")
     for name in report.ingested:
         print(f"  + {name}")

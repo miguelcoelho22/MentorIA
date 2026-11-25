@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_CORPUS_DIR = Path(__file__).resolve().parents[2] / "corpus"
+DEFAULT_CATALOG_DIR = Path(__file__).resolve().parents[2] / "catalog"
 
 PROVIDERS = {
     "openai": {
@@ -53,6 +54,7 @@ class Settings:
     top_k: int
     essay_k: int
     corpus_dir: Path
+    catalog_dir: Path
     auto_ingest: bool
 
     @property
@@ -83,5 +85,6 @@ class Settings:
             top_k=int(_env("RAG_TOP_K", "3")),
             essay_k=int(_env("RAG_ESSAY_K", "3")),
             corpus_dir=Path(_env("CORPUS_DIR", str(DEFAULT_CORPUS_DIR))),
+            catalog_dir=Path(_env("CATALOG_DIR", str(DEFAULT_CATALOG_DIR))),
             auto_ingest=_flag("AUTO_INGEST", True),
         )

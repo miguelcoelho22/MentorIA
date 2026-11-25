@@ -72,6 +72,20 @@ class VectorStore:
                 ON corpus_chunks USING hnsw (embedding vector_cosine_ops)
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS corpus_chunks_competency_idx ON corpus_chunks (competency)")
+            conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS activity_catalog (
+                    activity_id TEXT PRIMARY KEY,
+                    content_hash TEXT NOT NULL,
+                    area TEXT,
+                    subject TEXT,
+                    competency SMALLINT,
+                    embedding vector({self._dimensions}) NOT NULL
+                )
+            """)
+            conn.execute("ALTER TABLE activity_catalog ADD COLUMN IF NOT EXISTS area TEXT")
+            conn.execute("ALTER TABLE activity_catalog ADD COLUMN IF NOT EXISTS subject TEXT")
+            conn.execute("ALTER TABLE activity_catalog ALTER COLUMN competency DROP NOT NULL")
+            conn.execute("DELETE FROM activity_catalog WHERE area IS NULL")
 
     def source_hashes(self) -> dict[str, str]:
         with self._connect() as conn:
@@ -143,3 +157,42 @@ class VectorStore:
                 (np.asarray(embedding, dtype=np.float32), limit),
             ).fetchall()
         return [EssayReference(row[0], tuple(row[1]), row[2]) for row in rows]
+
+    def activity_hashes(self) -> dict[str, str]:
+        with self._connect() as conn:
+            return dict(conn.execute("SELECT activity_id, content_hash FROM activity_catalog").fetchall())
+
+    def upsert_activities(self, items: Sequence[tuple[str, str, str, str, int | None, Sequence[float]]]) -> None:
+        with self._connect() as conn, conn.transaction(), conn.cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO activity_catalog (activity_id, content_hash, area, subject, competency, embedding)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (activity_id) DO UPDATE
+                SET content_hash = EXCLUDED.content_hash, area = EXCLUDED.area, subject = EXCLUDED.subject,
+                    competency = EXCLUDED.competency, embedding = EXCLUDED.embedding
+                """,
+                [(activity_id, content_hash, area, subject, competency, np.asarray(e, dtype=np.float32))
+                 for activity_id, content_hash, area, subject, competency, e in items],
+            )
+
+    def delete_activities(self, activity_ids: Sequence[str]) -> None:
+        if activity_ids:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM activity_catalog WHERE activity_id = ANY(%s)", (list(activity_ids),))
+
+    def search_activities(self, embedding: Sequence[float], area: str, subject: str | None,
+                          competency: int | None, limit: int) -> list[str]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT activity_id FROM activity_catalog
+                WHERE area = %s
+                  AND (%s::text IS NULL OR subject = %s)
+                  AND (%s::smallint IS NULL OR competency = %s)
+                ORDER BY embedding <=> %s
+                LIMIT %s
+                """,
+                (area, subject, subject, competency, competency, np.asarray(embedding, dtype=np.float32), limit),
+            ).fetchall()
+        return [row[0] for row in rows]

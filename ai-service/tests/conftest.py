@@ -8,6 +8,7 @@ from ai_service.config import Settings
 from ai_service.store import EssayReference, Reference
 
 CORPUS_DIR = Path(__file__).resolve().parents[1] / "corpus"
+CATALOG_DIR = Path(__file__).resolve().parents[1] / "catalog"
 
 
 class FakeLlm:
@@ -66,7 +67,8 @@ def settings(**overrides) -> Settings:
         database_url="postgresql://unused/ai_db", provider="openai", api_key=None, base_url=None,
         llm_model="fake", llm_timeout_seconds=1, llm_max_retries=0, structured_output="json_schema",
         embedding_model="fake", embedding_dimensions=3, embedding_batch=10, send_dimensions=True,
-        rate_limit_wait_seconds=0, top_k=2, essay_k=2, corpus_dir=CORPUS_DIR, auto_ingest=False,
+        rate_limit_wait_seconds=0, top_k=2, essay_k=2, corpus_dir=CORPUS_DIR, catalog_dir=CATALOG_DIR,
+        auto_ingest=False,
     )
     values.update(overrides)
     return Settings(**values)

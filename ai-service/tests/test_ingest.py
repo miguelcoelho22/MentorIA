@@ -1,7 +1,8 @@
 import pytest
 
-from ai_service.ingest import ingest
-from conftest import CORPUS_DIR
+from ai_service.catalog import load_catalog
+from ai_service.ingest import ingest, sync_catalog
+from conftest import CATALOG_DIR, CORPUS_DIR
 
 
 class MemoryStore:
@@ -32,6 +33,18 @@ class MemoryStore:
 
     def finish_source(self, source, content_hash):
         self.sources[source] = content_hash
+
+    def activity_hashes(self):
+        return dict(getattr(self, "activities", {}))
+
+    def upsert_activities(self, items):
+        self.activities = getattr(self, "activities", {})
+        for activity_id, content_hash, area, subject, competency, embedding in items:
+            self.activities[activity_id] = content_hash
+
+    def delete_activities(self, ids):
+        for activity_id in ids:
+            self.activities.pop(activity_id, None)
 
     def remove_sources(self, sources):
         for name in sources:
@@ -108,3 +121,17 @@ def test_changing_embedding_model_reembeds_everything(tmp_path):
     report = ingest(store, switched, tmp_path, "gemini:b:3", batch_size=50)
     assert len(report.ingested) == 5 and switched.texts == 15
     assert sum(len(chunks) for chunks in store.chunks.values()) == 15
+
+
+def test_catalog_sync_is_incremental():
+    catalog = load_catalog(CATALOG_DIR)
+    store = MemoryStore()
+    store.activities = {"removida": "x"}
+    embed = CountingEmbedder()
+
+    first = sync_catalog(store, embed, catalog, "m1", batch_size=50)
+    assert (first.embedded, first.removed) == (len(catalog), 1)
+    second = sync_catalog(store, embed, catalog, "m1", batch_size=50)
+    assert (second.embedded, second.unchanged) == (0, len(catalog))
+    third = sync_catalog(store, embed, catalog, "m2", batch_size=50)
+    assert third.embedded == len(catalog)

@@ -65,16 +65,17 @@ def document_embedder(settings: Settings, attempts: int = 30) -> EmbedDocuments:
     return lambda texts: [fit_dimensions(vector, dimensions) for vector in embed(list(texts))]
 
 
-def chat_model(settings: Settings):
+def chat_model(settings: Settings, schema=None):
     from langchain_openai import ChatOpenAI
 
-    from ai_service.analysis import AnalysisResult
+    if schema is None:
+        from ai_service.analysis import AnalysisResult as schema
 
     options = dict(model=settings.llm_model, api_key=settings.api_key, temperature=0,
                    timeout=settings.llm_timeout_seconds, max_retries=settings.llm_max_retries)
     if settings.openai_compatible:
         options["base_url"] = settings.base_url
-    return ChatOpenAI(**options).with_structured_output(AnalysisResult, method=settings.structured_output)
+    return ChatOpenAI(**options).with_structured_output(schema, method=settings.structured_output)
 
 
 def embedding_fingerprint(settings: Settings) -> str:
