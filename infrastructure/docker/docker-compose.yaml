@@ -248,7 +248,10 @@ services:
       PGUSER: ${AI_DB_USER}
       PGPASSWORD: ${AI_DB_PASSWORD}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-${LLM_API_KEY:-}}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
     depends_on:
       postgres-ai:
         condition: service_healthy

@@ -18,6 +18,8 @@ RUN apt-get update \
 
 COPY --from=build /app/.venv /app/.venv
 COPY src/ ./src/
+COPY corpus/ ./corpus/
+COPY eval/ ./eval/
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/src"

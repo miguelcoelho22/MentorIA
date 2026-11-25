@@ -253,6 +253,64 @@ Exemplo de chamada autenticada:
 curl -H "Authorization: Bearer $(./mentoria token)" http://localhost:8080/api/v1/student/home
 ```
 
+### Correção com IA (RAG)
+
+A correção de redações usa o [AI Service](ai-service/README.md), com RAG sobre o pgvector. A base tem 1.501 redações reais corrigidas do corpus [Essay-BR](https://github.com/lplnufpi/essay-br) (licença MIT) e a rubrica do ENEM. Para ativá-la, preencha em `infrastructure/docker/.env` a chave da OpenAI (`OPENAI_API_KEY`) **ou** use o Gemini, que tem plano gratuito: `LLM_PROVIDER=gemini` e `GEMINI_API_KEY` (chave criada no [Google AI Studio](https://aistudio.google.com)). Depois suba a stack. Na primeira subida, o corpus de `ai-service/corpus/` é vetorizado automaticamente.
+
+```bash
+./mentoria ai-analyze       # envia uma redação de exemplo e mostra as notas por competência
+./mentoria ai-ingest        # ressincroniza o corpus após editar ai-service/corpus/
+./mentoria ai-test          # testes do AI Service (rodam em container)
+./mentoria ai-eval 20       # compara as notas da IA com as humanas em 20 redações, com e sem RAG
+./mentoria ai-import        # baixa novamente o Essay-BR e regenera o corpus
+```
+
+Sem a chave, o AI Service sobe normalmente, mas responde `503` na análise.
+
+#### Passo a passo com o Gemini (gratuito)
+
+1. Crie uma chave em [Google AI Studio](https://aistudio.google.com) → *Get API key*.
+2. Em `infrastructure/docker/.env`:
+
+   ```bash
+   LLM_PROVIDER=gemini
+   LLM_MODEL=gemini-3.1-flash-lite
+   GEMINI_API_KEY=<sua chave>
+   ```
+
+3. Suba e teste:
+
+   ```bash
+   ./mentoria start
+   ./mentoria logs ai-service     # espere "Corpus sincronizado" (Ctrl+C para sair)
+   ./mentoria ai-analyze
+   ```
+
+Nunca commite a chave: o `.env` está no `.gitignore`, e só o `.env.example` (sem chaves) vai para o repositório.
+
+#### Teste rápido com poucos dados
+
+No plano gratuito, a primeira vetorização das 1.501 redações pode levar dezenas de minutos. Para testar em 2 ou 3 minutos, use uma base menor e suba só o necessário:
+
+```bash
+./mentoria ai-import --corpus-size 100     # gera a base com 100 redações
+./mentoria start postgres-ai ai-service    # só o banco vetorial e o AI Service
+./mentoria ai-analyze                      # uma correção
+./mentoria ai-eval 5                       # 5 redações, com e sem RAG
+```
+
+Antes de commitar, volte à base completa com `./mentoria ai-import` e rode `./mentoria restart ai-service`.
+
+#### Se a análise responder `503`
+
+O campo `detail` traz a mensagem do provedor:
+
+| Mensagem | O que fazer |
+|---|---|
+| *no longer available* / *not found* | O modelo foi desativado para a sua conta. Troque `LLM_MODEL` por outro listado no AI Studio e rode `./mentoria restart ai-service`. |
+| *high demand* | O modelo está sobrecarregado. Tente de novo depois ou use outro modelo. |
+| *A chave do provedor de IA não está configurada* | Falta a chave no `.env`, ou `LLM_PROVIDER` não corresponde à chave preenchida. |
+
 ### Kubernetes (Docker Desktop)
 
 Ative o Kubernetes em Docker Desktop → Settings → Kubernetes (modo *kubeadm*, para o cluster enxergar as imagens locais) e rode:
