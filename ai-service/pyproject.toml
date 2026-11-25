@@ -1,7 +1,7 @@
 [project]
 name = "ai-service"
 version = "0.1.0"
-description = "Add your description here"
+description = "Análise de redações do ENEM com RAG (LangChain + pgvector)"
 readme = "README.md"
 authors = [
     { name = "miguel_coelho", email = "miguel.coelho@estudante.ufla.br" }
@@ -12,6 +12,7 @@ dependencies = [
     "langchain>=1.4.9",
     "langchain-community>=0.4.2",
     "langchain-openai>=1.7.4",
+    "numpy>=2.3",
     "pgvector>=0.5.1",
     "psycopg>=3.3.8",
     "python-dotenv>=1.2.4",
@@ -20,6 +21,16 @@ dependencies = [
 
 [project.scripts]
 ai-service = "ai_service:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "pytest>=8.4",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14.0"]

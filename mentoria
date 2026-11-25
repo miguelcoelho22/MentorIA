@@ -98,6 +98,51 @@ cmd_smoke() {
   (( FAILED )) && die "Algum teste falhou." || ok "Tudo certo."
 }
 
+cmd_ai_test() {
+  docker run --rm -v "$ROOT/ai-service":/app -w /app -e UV_PROJECT_ENVIRONMENT=/tmp/venv \
+    ghcr.io/astral-sh/uv:python3.14-bookworm-slim sh -c \
+    "apt-get update -qq >/dev/null && apt-get install -y -qq libpq5 >/dev/null 2>&1; uv sync --frozen -q && uv run --frozen pytest -q -p no:warnings"
+}
+
+cmd_ai_analyze() {
+  local body
+  body=$(python3 - <<'EOF'
+import json, uuid
+text = (
+    "Nas grandes cidades brasileiras, milhões de trabalhadores perdem horas diárias no transporte coletivo. "
+    "Esse cenário revela que o direito social ao transporte, previsto na Constituição, ainda não é garantido a todos.\n\n"
+    "Em primeiro lugar, a urbanização desordenada empurrou a população de baixa renda para as periferias, longe dos empregos. "
+    "Além disso, a prioridade dada ao automóvel congestionou as vias e tornou os ônibus mais lentos.\n\n"
+    "Portanto, cabe às prefeituras ampliar os corredores exclusivos de ônibus, a fim de reduzir o tempo de deslocamento."
+)
+print(json.dumps({"studentId": str(uuid.uuid4()), "essayId": str(uuid.uuid4()),
+                  "theme": "Desafios da mobilidade urbana no Brasil", "text": text}))
+EOF
+)
+  info "Analisando redação de exemplo (pode levar alguns segundos)..."
+  docker run --rm --network docker_app curlimages/curl:8.11.1 -s -X POST http://ai-service:8000/api/v1/analysis \
+    -H 'Content-Type: application/json' -d "$body" | python3 -m json.tool --no-ensure-ascii
+}
+
+cmd_ai_plan() {
+  local body
+  body=$(MESSAGE="${1:-Tenho 8 horas por semana e a prova é daqui a 6 semanas. Vou mal em matemática e física e quero melhorar a proposta de intervenção da redação.}" python3 - <<'EOF'
+import json, os, uuid
+print(json.dumps({
+    "studentId": str(uuid.uuid4()),
+    "message": os.environ["MESSAGE"],
+    "progress": {"averageByCompetency": [{"id": 1, "average": 150}, {"id": 2, "average": 130},
+                                         {"id": 3, "average": 120}, {"id": 4, "average": 140},
+                                         {"id": 5, "average": 80}], "weakestCompetency": 5},
+    "areaLevels": {"matematica": "basico", "natureza": "intermediario"},
+}))
+EOF
+)
+  info "Pedindo o plano de estudos (pode levar alguns segundos)..."
+  docker run --rm --network docker_app curlimages/curl:8.11.1 -s -X POST http://ai-service:8000/api/v1/study-plans/suggestions \
+    -H 'Content-Type: application/json' -d "$body" | python3 -m json.tool --no-ensure-ascii
+}
+
 cmd_k8s() {
   local sub="${1:-help}"; shift || true
   command -v kubectl >/dev/null || die "kubectl não encontrado."
@@ -144,6 +189,13 @@ Docker Compose:
   ./mentoria token [student|teacher]  Faz login e imprime o JWT
   ./mentoria smoke                Testa o gateway (401, 403, roteamento, 429)
   ./mentoria test                 Roda os testes Maven do gateway
+  ./mentoria ai-ingest            Sincroniza o corpus do RAG com o pgvector
+  ./mentoria ai-test              Roda os testes do AI Service (em container, sem Python local)
+  ./mentoria ai-analyze           Envia uma redação de exemplo para a análise com IA
+  ./mentoria ai-import            Baixa o Essay-BR e regenera o corpus de redações reais e o conjunto de avaliação
+  ./mentoria ai-eval [N]          Compara as notas da IA com as notas humanas de N redações (padrão 20), com e sem RAG
+  ./mentoria ai-plan ["pedido"]   Pede um plano de estudos à IA (com um pedido de exemplo se nenhum for informado)
+  ./mentoria ai-plan-eval         Testa o plano de estudos com pedidos legítimos e tentativas de ataque
 
 Kubernetes (Docker Desktop):
   ./mentoria k8s up|down|status|logs <deployment>|smoke
@@ -186,6 +238,13 @@ main() {
       ;;
     smoke)       cmd_smoke ;;
     test)        (cd "$ROOT/gateway" && mvn -q test) && ok "Testes do gateway passaram." ;;
+    ai-ingest)   compose exec ai-service python -m ai_service.ingest ;;
+    ai-test)     require_docker; cmd_ai_test ;;
+    ai-analyze)  require_docker; cmd_ai_analyze ;;
+    ai-import)   python3 -I "$ROOT/ai-service/scripts/import_essay_br.py" "$@" && info "Rode ./mentoria restart ai-service para vetorizar o corpus novo." ;;
+    ai-eval)     compose exec ai-service python -m ai_service.evaluate --limit "${1:-20}" ;;
+    ai-plan)     require_docker; cmd_ai_plan "${1:-}" ;;
+    ai-plan-eval) compose exec ai-service python -m ai_service.plan_eval "$@" ;;
     k8s)         cmd_k8s "$@" ;;
     help|-h|--help) cmd_help ;;
     *) warn "Comando desconhecido: $cmd"; cmd_help; exit 1 ;;

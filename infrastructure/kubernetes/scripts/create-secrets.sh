@@ -40,4 +40,12 @@ kubectl create secret generic mentoria-rabbitmq-secrets \
   --from-literal=RABBITMQ_PASSWORD="$RABBITMQ_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# Cria o Secret do provedor de IA usado pelo AI Service
+kubectl create secret generic mentoria-ai-secrets \
+  --namespace="$NAMESPACE" \
+  --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY:-${LLM_API_KEY:-}}" \
+  --from-literal=GEMINI_API_KEY="${GEMINI_API_KEY:-}" \
+  --from-literal=LLM_PROVIDER="${LLM_PROVIDER:-}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
 echo "Secrets criados ou atualizados com sucesso!"
