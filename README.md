@@ -210,6 +210,65 @@ O vídeo está dividido em quatro partes:
   
 ---
 
+## Como rodar localmente
+
+O script [`./mentoria`](mentoria), na raiz do repositório, reúne os comandos do Docker Compose e do Kubernetes. Pré-requisitos: Docker Desktop rodando e, para os testes do gateway, Java 21 e Maven.
+
+Na primeira execução o script cria `infrastructure/docker/.env` a partir do `.env.example`, se ele ainda não existir.
+
+### Docker Compose
+
+```bash
+./mentoria start            # sobe tudo (reconstrói as imagens) e espera o gateway
+./mentoria gateway          # sobe só Account + BFFs + Gateway, para testar a borda
+./mentoria smoke            # testa o gateway: login, 401, 403, roteamento e 429
+./mentoria stop             # para tudo (mantém os dados)
+```
+
+| Endereço | O que é |
+|---|---|
+| `http://localhost:8080/api/v1/...` | API Gateway |
+| `http://localhost:3000/student/` | App do aluno |
+| `http://localhost:3001/teacher/` | Painel do professor |
+| `http://localhost:15672` | Painel do RabbitMQ |
+
+Outros comandos:
+
+| Comando | O que faz |
+|---|---|
+| `./mentoria start <serviço...>` | Sobe só os serviços indicados |
+| `./mentoria restart <serviço>` | Reconstrói e reinicia um serviço |
+| `./mentoria logs [serviço]` | Acompanha os logs |
+| `./mentoria ps` | Lista os containers |
+| `./mentoria token [student\|teacher]` | Faz login com o usuário de demonstração e imprime o JWT |
+| `./mentoria test` | Roda os testes automatizados do gateway |
+| `./mentoria reset` | Derruba tudo e **apaga os bancos** (pede confirmação) |
+| `./mentoria help` | Lista todos os comandos |
+
+Usuários de demonstração (senha `MentorIA-demo-2026!`): `ana@demo.mentoria.test` e `bruno@demo.mentoria.test` (alunos) e `professor@demo.mentoria.test`.
+
+Exemplo de chamada autenticada:
+
+```bash
+curl -H "Authorization: Bearer $(./mentoria token)" http://localhost:8080/api/v1/student/home
+```
+
+### Kubernetes (Docker Desktop)
+
+Ative o Kubernetes em Docker Desktop → Settings → Kubernetes (modo *kubeadm*, para o cluster enxergar as imagens locais) e rode:
+
+```bash
+./mentoria k8s up           # constrói as imagens, instala o Ingress NGINX, aplica os manifestos e reinicia os pods
+./mentoria k8s status       # pods, services e ingress
+./mentoria k8s smoke        # o mesmo teste do gateway, via http://localhost
+./mentoria k8s logs gateway # logs de um deployment
+./mentoria k8s down         # remove o namespace mentoria
+```
+
+Pelo Ingress, a API fica em `http://localhost/api/v1/...` e os apps em `http://localhost/student/` e `http://localhost/teacher/`.
+
+---
+
 **Status do projeto:** 🟡 Em desenvolvimento
 
 ✅ Arquitetura e documentação — concluídas  

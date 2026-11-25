@@ -22,12 +22,14 @@ spec:
             - configMapRef:
                 name: gateway-config
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /actuator/health/readiness
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 20
             periodSeconds: 10
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /actuator/health/liveness
               port: 8080
             initialDelaySeconds: 45
             periodSeconds: 20

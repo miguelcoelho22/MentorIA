@@ -83,3 +83,23 @@ Sem ele, cada BFF ou serviço precisaria tratar separadamente questões como val
 Também foi descartada a ideia de concentrar regras de negócio no Gateway. O controle da cota de correções, por exemplo, permanece no Account, pois está relacionado ao direito de uso do aluno.
 
 O Gateway atua como ponto de entrada e proteção, sem substituir os BFFs na organização das respostas nem os microsserviços na execução das regras de negócio.
+
+## 6. Implementação
+
+O módulo [`gateway/`](../../../gateway) implementa as decisões acima com **Spring Cloud Gateway (WebFlux)** e **Spring Security Resource Server**.
+
+| Arquivo | O que faz |
+|---|---|
+| `src/main/resources/application.yml` | Rotas `/api/v1/auth/**` → Account, `/api/v1/student/**` → BFF Aluno, `/api/v1/teacher/**` → BFF Professor (o caminho é repassado sem alteração) e os filtros `RequestRateLimiter`. |
+| `security/SecurityConfig.java` | Valida o JWT RS256 com a chave pública do Account (`/api/v1/auth/jwks`) e o emissor `account`, converte a claim `role` em `ROLE_STUDENT`/`ROLE_TEACHER`, autoriza por rota e aplica o CORS. Qualquer rota fora da tabela é negada, então os serviços internos e os comandos da SAGA (`/quota-reservations`, `PUT /feedbacks`) não ficam acessíveis de fora. |
+| `security/IdentityHeadersFilter.java` | Remove `X-User-Id` e `X-User-Role` enviados pelo cliente e os recria a partir das claims `sub` e `role` do token validado. |
+| `tracing/CorrelationIdWebFilter.java` | Gera o `X-Correlation-Id` (descartando o do cliente), repassa aos BFFs e devolve na resposta, inclusive em `401`, `403` e `429`. |
+| `ratelimit/InMemoryRateLimiter.java` | *Token bucket* por usuário (`sub` do JWT) usado pelo filtro `RequestRateLimiter`: 60 req/min no geral e 2 req/min em `POST /api/v1/student/essays/{id}/correction-requests`. |
+
+**Variáveis de ambiente:** `ACCOUNT_SERVICE_URL`, `BFF_STUDENT_URL`, `BFF_TEACHER_URL` e `CORS_ALLOWED_ORIGINS` (lista separada por vírgula). Os limites ficam em `mentoria.gateway.rate-limit.*`.
+
+**Rate limiting e réplicas:** o contador fica na memória do Gateway, o que é suficiente com uma réplica. Para rodar várias réplicas, basta trocar os beans `generalRateLimiter` e `correctionRateLimiter` pelo `RedisRateLimiter` do Spring Cloud Gateway e adicionar um Redis.
+
+**Clientes web:** os apps chamam a API por caminho relativo (`/api/v1/...`, ver `clients/*/src/api.ts`). No Kubernetes o Ingress envia `/api` ao Gateway; no Docker Compose o nginx de cada cliente faz o mesmo repasse; no `npm run dev` o proxy do Vite aponta para `http://localhost:8080`. Assim cliente e API ficam na mesma origem e o CORS só é necessário em acessos diretos à porta do Gateway.
+
+**Health checks:** `/actuator/health/readiness` e `/actuator/health/liveness` (usados pelas probes do Kubernetes). Nenhum outro endpoint do Actuator é exposto.
