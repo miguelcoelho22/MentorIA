@@ -140,6 +140,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${ASSESSMENT_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${ASSESSMENT_DB_PASSWORD}
       ACCOUNT_SERVICE_URL: http://account:8080
+      FEEDBACK_SERVICE_URL: http://feedback:8080
     depends_on:
       postgres-assessment:
         condition: service_healthy
@@ -205,8 +206,11 @@ services:
     restart: on-failure
     build: ../../ai-service
     environment:
-      DATABASE_URL: postgresql://${AI_DB_USER}:${AI_DB_PASSWORD}@postgres-ai:5432/ai_db
+      DATABASE_URL: postgresql://postgres-ai:5432/ai_db
+      PGUSER: ${AI_DB_USER}
+      PGPASSWORD: ${AI_DB_PASSWORD}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-${LLM_API_KEY:-}}
     depends_on:
       postgres-ai:
         condition: service_healthy
