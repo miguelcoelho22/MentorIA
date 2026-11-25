@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -26,7 +27,7 @@ class AccountDirectory {
         return jdbc.query("""
                 SELECT u.id, u.name, u.email, enrollment.class_id
                 FROM users u
-                JOIN class_students enrollment ON enrollment.student_id = u.id
+                LEFT JOIN class_students enrollment ON enrollment.student_id = u.id
                 WHERE u.id = ? AND u.role = 'STUDENT'
                 """, rows -> {
                     if (!rows.next()) {
@@ -102,7 +103,7 @@ class AccountDirectory {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, detail);
     }
 
-    record Student(UUID id, String name, String email, String classId) { }
+    record Student(UUID id, String name, String email, @JsonInclude(JsonInclude.Include.NON_NULL) String classId) { }
 
     record ClassSummary(String id, String name, UUID teacherId, int studentCount) { }
 
