@@ -1,0 +1,7 @@
+services:
+  assessment:
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:?Defina RABBITMQ_USER no arquivo .env do Compose}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Defina RABBITMQ_PASSWORD no arquivo .env do Compose}
