@@ -43,3 +43,13 @@ CREATE TABLE IF NOT EXISTS account_signing_key (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     private_key_pkcs8 TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS quota_result_outbox (
+    event_id UUID PRIMARY KEY,
+    payload TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS quota_result_outbox_pending_idx
+    ON quota_result_outbox (published_at, created_at, event_id);
