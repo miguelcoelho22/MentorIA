@@ -105,6 +105,8 @@ class AccountDirectory {
 
     record Student(UUID id, String name, String email, @JsonInclude(JsonInclude.Include.NON_NULL) String classId) { }
 
+    record Profile(UUID id, String name, String email, String role) { }
+
     record ClassSummary(String id, String name, UUID teacherId, int studentCount) { }
 
     record Quota(UUID studentId, String period, int limit, int reserved, int consumed, int available) { }

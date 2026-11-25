@@ -3,17 +3,24 @@ package br.com.mentoria.account;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
+import br.com.mentoria.account.AccountDirectory.Profile;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -31,6 +38,36 @@ class AccountLoginController {
         this.jdbc = jdbc;
         this.tokens = tokens;
         this.demoEnabled = demoEnabled;
+    }
+
+    @GetMapping(value = "/api/v1/auth/jwks", produces = MediaType.APPLICATION_JSON_VALUE)
+    Map<String, Object> jwks() {
+        return tokens.publicKeys().toJSONObject();
+    }
+
+    @GetMapping("/api/v1/auth/me")
+    Profile me(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+        String bearerPrefix = "Bearer ";
+        if (authorization == null || !authorization.regionMatches(true, 0, bearerPrefix, 0, bearerPrefix.length())) {
+            throw invalidToken();
+        }
+
+        UUID userId;
+        try {
+            userId = tokens.verifiedSubject(authorization.substring(bearerPrefix.length()).strip());
+        } catch (JwtException e) {
+            throw invalidToken();
+        }
+
+        return jdbc.query("""
+                SELECT id, name, email, role FROM users WHERE id = ? AND (NOT demo OR ?)
+                """, rows -> {
+                    if (!rows.next()) {
+                        throw invalidToken();
+                    }
+                    return new Profile(rows.getObject("id", UUID.class), rows.getString("name"),
+                            rows.getString("email"), rows.getString("role"));
+                }, userId, demoEnabled);
     }
 
     @PostMapping("/api/v1/auth/login")
@@ -58,6 +95,17 @@ class AccountLoginController {
         error.setType(URI.create("https://mentoria.app/errors/invalid-credentials"));
         error.setTitle("Credenciais inválidas");
         return error;
+    }
+
+    private static ResponseStatusException invalidToken() {
+        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token Bearer ausente ou inválido.") {
+            @Override
+            public HttpHeaders getHeaders() {
+                HttpHeaders headers = new HttpHeaders();
+                headers.set(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+                return headers;
+            }
+        };
     }
 
     record LoginRequest(@NotBlank @Email String email, @NotBlank String password) { }
