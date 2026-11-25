@@ -38,3 +38,8 @@ CREATE TABLE IF NOT EXISTS class_students (
 );
 
 CREATE INDEX IF NOT EXISTS class_students_class_id_idx ON class_students (class_id);
+
+CREATE TABLE IF NOT EXISTS account_signing_key (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    private_key_pkcs8 TEXT NOT NULL
+);

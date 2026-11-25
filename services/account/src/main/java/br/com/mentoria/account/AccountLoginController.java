@@ -3,6 +3,7 @@ package br.com.mentoria.account;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -12,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,6 +21,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 class AccountLoginController {
+
+    static final String JWKS = "/api/v1/auth/jwks";
+    static final String WELL_KNOWN_JWKS = "/.well-known/jwks.json";
 
     private final JdbcTemplate jdbc;
     private final AccountTokenIssuer tokens;
@@ -31,6 +36,11 @@ class AccountLoginController {
         this.jdbc = jdbc;
         this.tokens = tokens;
         this.demoEnabled = demoEnabled;
+    }
+
+    @GetMapping({JWKS, WELL_KNOWN_JWKS})
+    Map<String, Object> jwks() {
+        return tokens.publicJwks();
     }
 
     @PostMapping("/api/v1/auth/login")

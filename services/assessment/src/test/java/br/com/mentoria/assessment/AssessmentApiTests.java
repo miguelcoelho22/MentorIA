@@ -121,6 +121,7 @@ class AssessmentApiTests {
         doAnswer(call -> {
             sent.add(call.getArgument(2));
             CorrelationData confirmation = call.getArgument(3);
+            assertThat(confirmation.getId()).isEqualTo(id);
             confirmation.getFuture().complete(new CorrelationData.Confirm(sent.size() == 2, null));
             return null;
         }).when(rabbit).send(eq("mentoria.saga"), eq("redacao.enviada"), any(Message.class), any(CorrelationData.class));
@@ -137,8 +138,8 @@ class AssessmentApiTests {
             assertThat(message.getMessageProperties().getDeliveryMode()).isEqualTo(MessageDeliveryMode.PERSISTENT);
             assertThat(message.getMessageProperties().getContentType()).isEqualTo("application/json");
             assertThat(json.readTree(message.getBody())).isEqualTo(json.readTree("""
-                    {"redacaoId":"%s","alunoId":"%s"}
-                    """.formatted(ANA_ESSAY, ANA)));
+                    {"requestId":"%s","redacaoId":"%s","alunoId":"%s","essayId":"%s","studentId":"%s"}
+                    """.formatted(id, ANA_ESSAY, ANA, ANA_ESSAY, ANA)));
         });
     }
 

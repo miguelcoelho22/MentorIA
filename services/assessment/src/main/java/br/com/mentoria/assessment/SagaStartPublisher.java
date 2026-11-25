@@ -21,6 +21,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @Component
 class SagaStartPublisher {
@@ -30,17 +32,19 @@ class SagaStartPublisher {
     private final JdbcTemplate jdbc;
     private final RabbitTemplate rabbit;
     private final TransactionTemplate transaction;
+    private final ObjectMapper json;
     private final String exchange;
     private final String routingKey;
     private final Duration timeout;
 
-    SagaStartPublisher(JdbcTemplate jdbc, RabbitTemplate rabbit, PlatformTransactionManager manager,
+    SagaStartPublisher(JdbcTemplate jdbc, RabbitTemplate rabbit, PlatformTransactionManager manager, ObjectMapper json,
             @Value("${assessment.saga.exchange}") String exchange,
             @Value("${assessment.saga.start-routing-key}") String routingKey,
             @Value("${assessment.outbox.confirm-timeout}") Duration timeout) {
         this.jdbc = jdbc;
         this.rabbit = rabbit;
         this.transaction = new TransactionTemplate(manager);
+        this.json = json;
         this.exchange = exchange;
         this.routingKey = routingKey;
         this.timeout = timeout;
@@ -70,15 +74,21 @@ class SagaStartPublisher {
     }
 
     private boolean send(StartMessage message) {
+        String requestId = message.requestId().toString();
+        var payload = (ObjectNode) json.readTree(message.payload());
+        payload.put("requestId", requestId);
+        payload.set("essayId", payload.required("redacaoId"));
+        payload.set("studentId", payload.required("alunoId"));
+
         var properties = new MessageProperties();
         properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
         properties.setContentEncoding(StandardCharsets.UTF_8.name());
         properties.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
-        properties.setMessageId(message.requestId().toString());
-        var correlation = new CorrelationData(message.requestId().toString());
+        properties.setMessageId(requestId);
+        var correlation = new CorrelationData(requestId);
 
         try {
-            rabbit.send(exchange, routingKey, new Message(message.payload().getBytes(StandardCharsets.UTF_8), properties), correlation);
+            rabbit.send(exchange, routingKey, new Message(json.writeValueAsBytes(payload), properties), correlation);
             var confirmation = correlation.getFuture().get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             if (confirmation.isAck() && correlation.getReturned() == null) {
                 return true;
