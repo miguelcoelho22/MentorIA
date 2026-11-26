@@ -1,121 +1,68 @@
 import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { isLoggedIn, logout } from './api'
+import { USE_MOCK } from './services'
+import Login from './pages/Login'
+import HomePage from './pages/HomePage'
+import EssaysPage from './pages/EssaysPage'
+import NewEssayPage from './pages/NewEssayPage'
+import CorrectionPage from './pages/CorrectionPage'
+import PlanPage from './pages/PlanPage'
 import './App.css'
 
+export type Page =
+  | { name: 'home' }
+  | { name: 'essays' }
+  | { name: 'new-essay' }
+  | { name: 'correction'; requestId: string }
+  | { name: 'plan' }
+
+export type Navigate = (page: Page) => void
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [logged, setLogged] = useState(isLoggedIn())
+  const [page, setPage] = useState<Page>({ name: 'home' })
+
+  if (!logged) {
+    return <Login onLogin={() => setLogged(true)} />
+  }
+
+  function exit() {
+    logout()
+    setLogged(false)
+    setPage({ name: 'home' })
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
+    <div className="app">
+      <header className="topbar">
+        <strong>MentorIA</strong>
+        {USE_MOCK && <span className="badge">dados de exemplo</span>}
+        <button className="link" onClick={exit}>Sair</button>
+      </header>
+
+      <main className="content">
+        {page.name === 'home' && <HomePage go={setPage} />}
+        {page.name === 'essays' && <EssaysPage go={setPage} />}
+        {page.name === 'new-essay' && <NewEssayPage go={setPage} />}
+        {page.name === 'correction' && <CorrectionPage requestId={page.requestId} go={setPage} />}
+        {page.name === 'plan' && <PlanPage />}
+      </main>
+
+      <nav className="tabbar">
+        <button className={page.name === 'home' ? 'active' : ''} onClick={() => setPage({ name: 'home' })}>
+          Início
         </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        <button
+          className={page.name === 'essays' || page.name === 'new-essay' || page.name === 'correction' ? 'active' : ''}
+          onClick={() => setPage({ name: 'essays' })}
+        >
+          Redações
+        </button>
+        <button className={page.name === 'plan' ? 'active' : ''} onClick={() => setPage({ name: 'plan' })}>
+          Plano
+        </button>
+      </nav>
+    </div>
   )
 }
 
