@@ -1,3 +1,10 @@
+package br.com.mentoria.feedback;
+
+import br.com.mentoria.feedback.FeedbackData.AnalyzedDraftRequest;
+import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
+
 @Component
 @RequiredArgsConstructor
 class FeedbackConsumer {
@@ -7,7 +14,7 @@ class FeedbackConsumer {
     @RabbitListener(queues = FeedbackMessaging.FEEDBACK_QUEUE)
     public void gerarFeedback(GerarFeedbackCommand command) {
 
-        var request = new FeedbackData.AnalyzedDraftRequest(
+        var request = new AnalyzedDraftRequest(
                 command.studentId(),
                 command.essayId(),
                 command.competencies()

@@ -5,6 +5,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import br.com.mentoria.feedback.FeedbackData.AnalyzedDraftRequest;
 import br.com.mentoria.feedback.FeedbackData.Competency;
 import br.com.mentoria.feedback.FeedbackData.DraftRequest;
 import br.com.mentoria.feedback.FeedbackData.DraftResult;
@@ -95,6 +96,11 @@ class FeedbackService {
 
     @Transactional
     public void publish(UUID requestId) {
+        publish(requestId, null);
+    }
+
+    @Transactional
+    public void publish(UUID requestId, Long sagaId) {
         lockRequest(requestId);
         StoredFeedback existing = find(requestId);
         if (existing == null) {

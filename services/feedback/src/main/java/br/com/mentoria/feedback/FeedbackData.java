@@ -35,7 +35,7 @@ final class FeedbackData {
 
     record FeedbackPublished(
             UUID eventId,
-            Long sagaId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Long sagaId,
             UUID requestId,
             UUID studentId,
             Instant publishedAt,

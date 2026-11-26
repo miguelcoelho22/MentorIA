@@ -1,6 +1,7 @@
 package br.com.mentoria.feedback;
 
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -10,6 +11,11 @@ import org.springframework.context.annotation.Configuration;
 class FeedbackMessaging {
 
     public static final String FEEDBACK_QUEUE = "feedback.gerar";
+
+    @Bean
+    Jackson2JsonMessageConverter rabbitMessageConverter() {
+        return new Jackson2JsonMessageConverter(GerarFeedbackCommand.class.getPackageName());
+    }
 
     @Bean
     TopicExchange feedbackExchange(
@@ -37,6 +43,6 @@ class FeedbackMessaging {
         return BindingBuilder
                 .bind(feedbackQueue)
                 .to(commandExchange)
-                .with("feedback.gerar");
+                .with(FEEDBACK_QUEUE);
     }
 }

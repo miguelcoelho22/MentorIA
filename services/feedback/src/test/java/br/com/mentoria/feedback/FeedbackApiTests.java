@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -19,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import br.com.mentoria.feedback.FeedbackData.Competency;
@@ -26,9 +28,13 @@ import br.com.mentoria.feedback.FeedbackData.DraftRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
+import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -46,6 +52,7 @@ import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:feedback-api;MODE=PostgreSQL",
+        "spring.rabbitmq.listener.simple.auto-startup=false",
         "feedback.outbox.enabled=false"
 })
 @AutoConfigureMockMvc
@@ -65,6 +72,7 @@ class FeedbackApiTests {
     @Autowired private ObjectMapper json;
     @Autowired private FeedbackService service;
     @Autowired private FeedbackOutboxPublisher publisher;
+    @Autowired private RabbitListenerEndpointRegistry listeners;
     @MockitoBean private FeedbackAnalysisClient analysis;
     @MockitoBean private RabbitTemplate rabbit;
 
@@ -98,10 +106,42 @@ class FeedbackApiTests {
         assertThat(event.get("eventId").asString()).isEqualTo(jdbc.queryForObject(
                 "SELECT event_id FROM outbox_events WHERE request_id = ?", UUID.class, id).toString());
         assertThat(event.get("requestId").asString()).isEqualTo(id.toString());
+        assertThat(event.has("sagaId")).isFalse();
         assertThat(event.get("studentId").asString()).isEqualTo(STUDENT.toString());
         assertThat(event.get("totalScore").asInt()).isEqualTo(640);
         assertThat(event.get("competencies").size()).isEqualTo(5);
         assertThat(event.get("competencies").get(0).has("comment")).isFalse();
+    }
+
+    @Test
+    @Transactional
+    void consumesSagaJsonAndPublishesOneCorrelatedEventOnRedelivery() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        long sagaId = 42L;
+        byte[] body = json.writeValueAsBytes(Map.of("sagaId", sagaId, "requestId", requestId,
+                "studentId", STUDENT, "essayId", DRAFT.essayId(), "competencies", SCORES));
+        var properties = new MessageProperties();
+        properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+        properties.setHeader("__TypeId__", "br.com.mentoria.saga_orchestrator.messaging.GerarFeedbackCommand");
+        var message = new Message(body, properties);
+
+        var container = (SimpleMessageListenerContainer) listeners.getListenerContainers().iterator().next();
+        assertThat(container.getQueueNames()).containsExactly("feedback.gerar");
+        var listener = (ChannelAwareMessageListener) container.getMessageListener();
+        listener.onMessage(message, null);
+        listener.onMessage(message, null);
+
+        var feedback = service.getPublished(requestId);
+        assertThat(feedback.essayId()).isEqualTo(DRAFT.essayId());
+        assertThat(feedback.totalScore()).isEqualTo(640);
+        assertThat(feedback.competencies()).isEqualTo(SCORES);
+        verifyNoInteractions(analysis);
+
+        var payloads = jdbc.queryForList("SELECT payload FROM outbox_events WHERE request_id = ?", String.class, requestId);
+        assertThat(payloads).hasSize(1);
+        var event = json.readTree(payloads.getFirst());
+        assertThat(event.get("sagaId").asLong()).isEqualTo(sagaId);
+        assertThat(event.get("requestId").asString()).isEqualTo(requestId.toString());
     }
 
     @Test
