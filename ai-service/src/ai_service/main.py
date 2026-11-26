@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
-
+from ai_service.rabbitmq import RabbitMQClient
 from ai_service import ingest
 from ai_service.analysis import AnalysisRequest, AnalysisResult, Analyzer, InvalidAnalysis
 from ai_service.catalog import load_catalog
@@ -88,11 +88,26 @@ def _auto_ingest(settings: Settings, store: VectorStore) -> None:
 
 def create_app(analyzer: Analyzer | None = None, settings: Settings | None = None,
                planner: StudyPlanner | None = None) -> FastAPI:
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if app.state.analyzer is None and app.state.planner is None:
-            app.state.analyzer, app.state.planner = build_services(settings or Settings.from_env())
+            app.state.analyzer, app.state.planner = build_services(
+                settings or Settings.from_env()
+            )
+
+        current_settings = settings or Settings.from_env()
+
+        app.state.rabbitmq = RabbitMQClient(
+            current_settings,
+            app.state.analyzer,
+        )
+        await app.state.rabbitmq.connect()
+
         yield
+
+        if getattr(app.state, "rabbitmq", None):
+            await app.state.rabbitmq.close()
 
     app = FastAPI(
         title="MentorIA AI Service",
@@ -100,6 +115,7 @@ def create_app(analyzer: Analyzer | None = None, settings: Settings | None = Non
         version="1.0.0",
         lifespan=lifespan,
     )
+
     app.state.analyzer = analyzer
     app.state.planner = planner
 
