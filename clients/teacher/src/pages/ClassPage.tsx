@@ -28,8 +28,14 @@ function ClassPage({ classId, className, openStudent }: Props) {
         </div>
         <div className="card">
           <span className="muted">Competência mais fraca</span>
-          <strong className="big">C{overview.weakestCompetency}</strong>
-          <span className="small">{COMPETENCIES[overview.weakestCompetency]}</span>
+          {overview.weakestCompetency === null ? (
+            <strong className="small">Sem notas</strong>
+          ) : (
+            <>
+              <strong className="big">C{overview.weakestCompetency}</strong>
+              <span className="small">{COMPETENCIES[overview.weakestCompetency]}</span>
+            </>
+          )}
         </div>
       </div>
 

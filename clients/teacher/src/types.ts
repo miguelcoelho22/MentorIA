@@ -18,7 +18,7 @@ export type ClassOverview = {
   classId: string
   students: number
   averageScore: number
-  weakestCompetency: number
+  weakestCompetency: number | null
   needSupport: StudentNeedingSupport[]
 }
 

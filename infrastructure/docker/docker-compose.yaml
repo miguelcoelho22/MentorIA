@@ -133,6 +133,7 @@ services:
     container_name: mentoria-saga-orchestrator
     build: ../../services/saga-orchestrator
     environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-saga:5432/saga_db
       SPRING_DATASOURCE_USERNAME: ${SAGA_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${SAGA_DB_PASSWORD}
@@ -161,8 +162,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-account:5432/account_db
       SPRING_DATASOURCE_USERNAME: ${ACCOUNT_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${ACCOUNT_DB_PASSWORD}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     depends_on:
       postgres-account:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - app
@@ -177,10 +184,16 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-assessment:5432/assessment_db
       SPRING_DATASOURCE_USERNAME: ${ASSESSMENT_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${ASSESSMENT_DB_PASSWORD}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       ACCOUNT_SERVICE_URL: http://account:8080
       FEEDBACK_SERVICE_URL: http://feedback:8080
     depends_on:
       postgres-assessment:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       account:
         condition: service_started
