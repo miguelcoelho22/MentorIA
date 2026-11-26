@@ -19,6 +19,20 @@ spec:
           ports:
             - containerPort: 8000
           env:
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-rabbitmq-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-rabbitmq-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq:5672/
+            - name: FEEDBACK_SERVICE_URL
+              value: http://feedback:8080
             - name: DATABASE_URL
               value: postgresql://postgres-ai:5432/ai_db
             - name: PGUSER

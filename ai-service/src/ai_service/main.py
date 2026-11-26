@@ -5,8 +5,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
-from ai_service.rabbitmq import RabbitMQClient
 from ai_service import ingest
+from ai_service.rabbitmq import RabbitMQClient
+from ai_service.resilience import CircuitBreaker, CircuitOpenError, Metrics, Timer, TtlCache
+from ai_service.tools import history_tool
 from ai_service.analysis import AnalysisRequest, AnalysisResult, Analyzer, InvalidAnalysis
 from ai_service.catalog import load_catalog
 from ai_service.config import Settings
@@ -60,6 +62,11 @@ def build_services(settings: Settings) -> tuple[Analyzer | None, StudyPlanner | 
         rubric=load_rubric(settings.corpus_dir),
         top_k=settings.top_k,
         essay_k=settings.essay_k,
+        history=history_tool(settings.feedback_service_url),
+        breaker=CircuitBreaker(settings.circuit_failure_threshold, settings.circuit_open_seconds,
+                               ignore=(InvalidAnalysis,)),
+        cache=TtlCache(settings.cache_size, settings.cache_ttl_seconds),
+        metrics=Metrics(settings.price_input_per_million, settings.price_output_per_million, settings.llm_model),
     )
     planner = StudyPlanner(
         intake_llm=chat_model(settings, Intake),
@@ -91,22 +98,20 @@ def create_app(analyzer: Analyzer | None = None, settings: Settings | None = Non
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        if app.state.analyzer is None and app.state.planner is None:
-            app.state.analyzer, app.state.planner = build_services(
-                settings or Settings.from_env()
-            )
-
         current_settings = settings or Settings.from_env()
-
-        app.state.rabbitmq = RabbitMQClient(
-            current_settings,
-            app.state.analyzer,
-        )
-        await app.state.rabbitmq.connect()
-
+        if app.state.analyzer is None and app.state.planner is None:
+            app.state.analyzer, app.state.planner = build_services(current_settings)
+        app.state.planner_breaker = CircuitBreaker(current_settings.circuit_failure_threshold,
+                                                   current_settings.circuit_open_seconds,
+                                                   ignore=(PlanRejected, InvalidPlan))
+        app.state.planner_metrics = Metrics(current_settings.price_input_per_million,
+                                            current_settings.price_output_per_million, current_settings.llm_model)
+        app.state.rabbitmq = None
+        if current_settings.messaging_enabled:
+            app.state.rabbitmq = RabbitMQClient(current_settings, app.state.analyzer)
+            app.state.rabbitmq.start()
         yield
-
-        if getattr(app.state, "rabbitmq", None):
+        if app.state.rabbitmq is not None:
             await app.state.rabbitmq.close()
 
     app = FastAPI(
@@ -126,7 +131,20 @@ def create_app(analyzer: Analyzer | None = None, settings: Settings | None = Non
             "service": "ai-service",
             "analysis": "ready" if request.app.state.analyzer else "disabled",
             "studyPlans": "ready" if request.app.state.planner else "disabled",
+            "messaging": "connected" if getattr(request.app.state.rabbitmq, "connected", False) else "disconnected",
         }
+
+    @app.get("/api/v1/metrics")
+    def metrics(request: Request):
+        """Latência medida, tokens e custo estimado por operação, cache e estado dos circuit breakers."""
+        current: Analyzer | None = request.app.state.analyzer
+        body = {"analysis": None, "studyPlans": request.app.state.planner_metrics.snapshot(),
+                "studyPlanCircuitBreaker": request.app.state.planner_breaker.snapshot()}
+        if current is not None:
+            body["analysis"] = current.metrics.snapshot()
+            body["analysisCircuitBreaker"] = current.breaker.snapshot()
+            body["analysisCache"] = current.cache.snapshot()
+        return body
 
     @app.post("/api/v1/analysis", response_model=AnalysisResult)
     async def analyze(body: AnalysisRequest, request: Request):
@@ -136,6 +154,8 @@ def create_app(analyzer: Analyzer | None = None, settings: Settings | None = Non
                            "A chave do provedor de IA não está configurada no AI Service.", "ai-unavailable")
         try:
             return await run_in_threadpool(current.analyze, body)
+        except CircuitOpenError as e:
+            return problem(503, "Serviço de IA indisponível", str(e), "ai-circuit-open")
         except InvalidAnalysis as e:
             log.warning("Análise inválida para a redação %s: %s", body.essayId, e)
             return problem(502, "Análise inválida", str(e), "ai-invalid-analysis")
@@ -150,8 +170,14 @@ def create_app(analyzer: Analyzer | None = None, settings: Settings | None = Non
         if current is None:
             return problem(503, "Serviço de IA indisponível",
                            "A chave do provedor de IA não está configurada no AI Service.", "ai-unavailable")
+        timer = Timer()
+        breaker: CircuitBreaker = request.app.state.planner_breaker
         try:
-            return await run_in_threadpool(current.suggest, body)
+            suggestion = await run_in_threadpool(breaker.call, current.suggest, body)
+            request.app.state.planner_metrics.record("studyPlan", timer.elapsed_ms, ok=True)
+            return suggestion
+        except CircuitOpenError as e:
+            return problem(503, "Serviço de IA indisponível", str(e), "ai-circuit-open")
         except PlanRejected as rejected:
             log.info("Pedido de plano recusado para o aluno %s: %s", body.studentId, rejected.reason)
             return problem(422, "Pedido fora do escopo", REJECTION_MESSAGE, "study-plan-out-of-scope",

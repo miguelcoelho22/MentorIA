@@ -45,3 +45,15 @@ spec:
     - port: 8080
       targetPort: 8080
   type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: saga-orchestrator
+spec:
+  selector:
+    app: saga-orchestrator
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

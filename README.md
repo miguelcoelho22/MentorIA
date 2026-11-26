@@ -188,6 +188,10 @@ A arquitetura também contará com um API Gateway, dois BFFs, dois clientes web 
 
 - [08 — SAGA de Correção de Redação](docs/assets/arquitetura/08-SAGA.md)
 
+**Parte 4 — IA**
+
+- [09 — Integração de LLM: RAG, LangChain e resiliência](docs/assets/arquitetura/09-llm.md)
+
 A documentação será atualizada conforme as frentes forem concluídas, mantendo as decisões arquiteturais consistentes entre os arquivos.
 
 ---
@@ -252,6 +256,23 @@ Exemplo de chamada autenticada:
 ```bash
 curl -H "Authorization: Bearer $(./mentoria token)" http://localhost:8080/api/v1/student/home
 ```
+
+### Parte 4: demonstração sem frontend
+
+Tudo passa pelo gateway e pelo BFF do aluno, como o app faria:
+
+```bash
+./mentoria start          # sobe a stack (com a chave do provedor de IA no .env)
+./mentoria saga           # SAGA, caminho feliz: redação → cota reservada → correção com RAG → feedback publicado → cota consumida → COMPLETED
+./mentoria saga-falha     # SAGA com falha provocada: derruba o AI Service, a SAGA compensa (cota devolvida) → FAILED
+./mentoria sagas          # últimas SAGAs; detalhes em http://localhost:8090/api/v1/sagas/<requestId>
+./mentoria ai-metrics     # latência medida, tokens, custo estimado, cache e circuit breaker do LLM
+./mentoria ai-eval-report # avaliação do RAG (5 redações, com e sem recuperação) em docs/avaliacao-rag.md
+```
+
+O `./mentoria saga` também mostra o feedback publicado e o modelo de leitura do CQRS (plano do Study Plan) atualizado pelo evento `FeedbackPublished`. Cada aluno de demonstração tem 4 correções por mês: depois disso a SAGA termina `REJECTED` (cota esgotada), o que também pode ser demonstrado; para continuar, use o outro aluno (`./mentoria saga bruno@demo.mentoria.test`) ou `./mentoria reset`. O gateway aceita 2 pedidos de correção por minuto por aluno.
+
+Bancos separados por serviço: `docker ps` mostra os 6 PostgreSQL (`mentoria-postgres-*`): um para cada serviço de domínio, um para o orquestrador da SAGA e o pgvector do AI Service.
 
 ### IA: correção de redações e plano de estudos (RAG)
 
@@ -362,9 +383,9 @@ Pelo Ingress, a API fica em `http://localhost/api/v1/...` e os apps em `http://l
 **Status do projeto:** 🟡 Em desenvolvimento
 
 ✅ Arquitetura e documentação — concluídas  
-⏳ Implementação e integração dos microsserviços — pendentes  
-✅ Docker e Kubernetes — pendentes  
-⏳ Demonstração do sistema funcionando — pendente
+✅ Implementação e integração dos microsserviços  
+✅ Docker e Kubernetes  
+✅ SAGA orquestrada com compensação, CQRS, RAG com LangChain e LLM resiliente
 
 ---
 
