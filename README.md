@@ -259,6 +259,8 @@ curl -H "Authorization: Bearer $(./mentoria token)" http://localhost:8080/api/v1
 
 ### Parte 4: demonstração sem frontend
 
+Link do video - https://www.youtube.com/watch?v=ENOOSCYjy6U
+
 Tudo passa pelo gateway e pelo BFF do aluno, como o app faria:
 
 ```bash
