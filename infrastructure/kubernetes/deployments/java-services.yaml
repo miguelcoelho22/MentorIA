@@ -32,6 +32,20 @@ spec:
                 secretKeyRef:
                   name: mentoria-db-secrets
                   key: ACCOUNT_DB_PASSWORD
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            - name: SPRING_RABBITMQ_PORT
+              value: "5672"
+            - name: SPRING_RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-rabbitmq-secrets
+                  key: RABBITMQ_USER
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-rabbitmq-secrets
+                  key: RABBITMQ_PASSWORD
           readinessProbe:
             tcpSocket:
               port: 8080
@@ -72,6 +86,20 @@ spec:
                 secretKeyRef:
                   name: mentoria-db-secrets
                   key: ASSESSMENT_DB_PASSWORD
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            - name: SPRING_RABBITMQ_PORT
+              value: "5672"
+            - name: SPRING_RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-rabbitmq-secrets
+                  key: RABBITMQ_USER
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-rabbitmq-secrets
+                  key: RABBITMQ_PASSWORD
             - name: ACCOUNT_SERVICE_URL
               value: http://account:8080
           readinessProbe:
@@ -184,6 +212,66 @@ spec:
                 secretKeyRef:
                   name: mentoria-rabbitmq-secrets
                   key: RABBITMQ_PASSWORD
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+# SAGA ORCHESTRATOR
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: saga-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: saga-orchestrator
+  template:
+    metadata:
+      labels:
+        app: saga-orchestrator
+    spec:
+      containers:
+        - name: saga-orchestrator
+          image: docker-saga-orchestrator:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres-saga:5432/saga_db
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: SAGA_DB_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: SAGA_DB_PASSWORD
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            - name: SPRING_RABBITMQ_PORT
+              value: "5672"
+            - name: SPRING_RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-rabbitmq-secrets
+                  key: RABBITMQ_USER
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-rabbitmq-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: ASSESSMENT_SERVICE_URL
+              value: http://assessment:8080
+            - name: ACCOUNT_SERVICE_URL
+              value: http://account:8080
+            - name: FEEDBACK_SERVICE_URL
+              value: http://feedback:8080
           readinessProbe:
             tcpSocket:
               port: 8080

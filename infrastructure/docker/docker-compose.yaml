@@ -132,24 +132,29 @@ services:
   # ==========================================
   saga-orchestrator:
     container_name: mentoria-saga-orchestrator
+    restart: on-failure
     build: ../../services/saga-orchestrator
+    # Só para a demonstração: consulta das SAGAs e dos passos de compensação (GET /api/v1/sagas).
+    ports:
+      - "127.0.0.1:8090:8080"
     environment:
       JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-saga:5432/saga_db
       SPRING_DATASOURCE_USERNAME: ${SAGA_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${SAGA_DB_PASSWORD}
-
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
-
+      ASSESSMENT_SERVICE_URL: http://assessment:8080
+      ACCOUNT_SERVICE_URL: http://account:8080
+      FEEDBACK_SERVICE_URL: http://feedback:8080
+      SAGA_ANALYSIS_TIMEOUT: ${SAGA_ANALYSIS_TIMEOUT:-60s}
     depends_on:
       postgres-saga:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-
     networks:
       - app
       - saga-db
@@ -266,8 +271,12 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-${LLM_API_KEY:-}}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      FEEDBACK_SERVICE_URL: http://feedback:8080
     depends_on:
       postgres-ai:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - app

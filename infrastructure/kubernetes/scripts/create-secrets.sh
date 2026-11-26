@@ -31,6 +31,8 @@ kubectl create secret generic mentoria-db-secrets \
   --from-literal=STUDY_PLAN_DB_PASSWORD="$STUDY_PLAN_DB_PASSWORD" \
   --from-literal=AI_DB_USER="$AI_DB_USER" \
   --from-literal=AI_DB_PASSWORD="$AI_DB_PASSWORD" \
+  --from-literal=SAGA_DB_USER="$SAGA_DB_USER" \
+  --from-literal=SAGA_DB_PASSWORD="$SAGA_DB_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Cria o Secret do RabbitMQ

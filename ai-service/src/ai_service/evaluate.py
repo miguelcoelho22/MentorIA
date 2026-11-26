@@ -47,8 +47,8 @@ def load_eval_set(path: Path, limit: int) -> list[dict]:
     return essays[:limit]
 
 
-def run(analyzer: Analyzer, essays: list[dict], use_rag: bool,
-        delay: float = 0.0) -> tuple[list[list[int]], list[list[int]]]:
+def run(analyzer: Analyzer, essays: list[dict], use_rag: bool, delay: float = 0.0,
+        rows: dict[int, dict] | None = None) -> tuple[list[list[int]], list[list[int]]]:
     expected, predicted = [], []
     for index, essay in enumerate(essays, start=1):
         if delay and index > 1:
@@ -62,6 +62,9 @@ def run(analyzer: Analyzer, essays: list[dict], use_rag: bool,
             continue
         expected.append(list(essay["scores"]))
         predicted.append([c.score for c in result.competencies])
+        if rows is not None:
+            row = rows.setdefault(index, {"theme": essay["theme"] or "Tema livre", "human": list(essay["scores"])})
+            row["rag" if use_rag else "base"] = predicted[-1]
         print(f"  [{index}/{len(essays)}] humano={sum(essay['scores'])} ia={sum(predicted[-1])}", file=sys.stderr)
     return expected, predicted
 
@@ -73,11 +76,36 @@ def report(label: str, metrics: Metrics) -> str:
             f"nota exata: {metrics.exact:5.1%} | até 40 pontos: {metrics.adjacent:5.1%}")
 
 
+def markdown(rows: dict[int, dict], lines: list[str], provider: str, model: str) -> str:
+    def fmt(scores):
+        return "—" if not scores else f"{sum(scores)} ({'/'.join(str(s) for s in scores)})"
+
+    def err(row, key):
+        return "—" if key not in row else str(abs(sum(row[key]) - sum(row["human"])))
+
+    out = ["# Avaliação do RAG da correção de redações", "",
+           f"Provedor `{provider}`, modelo `{model}`. Cada redação do conjunto de teste (Essay-BR, fora do corpus "
+           "vetorizado) foi corrigida duas vezes: com recuperação (rubrica + redações e trechos parecidos do pgvector) "
+           "e sem recuperação (só a rubrica). A nota humana é a referência.", "",
+           "| # | Tema | Humano (C1/…/C5) | IA com RAG | IA sem RAG | Erro com RAG | Erro sem RAG |",
+           "|---|---|---|---|---|---|---|"]
+    for index, row in sorted(rows.items()):
+        out.append(f"| {index} | {row['theme'][:60]} | {fmt(row['human'])} | {fmt(row.get('rag'))} | "
+                   f"{fmt(row.get('base'))} | {err(row, 'rag')} | {err(row, 'base')} |")
+    out += ["", "## Métricas", "", "```", *lines, "```", "",
+            "## Análise", "",
+            "_Preencha depois de rodar: em quais competências o RAG mais ajudou, em quais redações errou e por quê "
+            "(ex.: notas extremas, temas sem redações parecidas no corpus)._", ""]
+    return "\n".join(out)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compara as notas da IA com as notas humanas do conjunto de avaliação.")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--file", type=Path, default=DEFAULT_EVAL_FILE)
     parser.add_argument("--no-baseline", action="store_true", help="não roda a comparação sem RAG")
+    parser.add_argument("--markdown", action="store_true",
+                        help="imprime um relatório em Markdown (redação por redação) em vez das métricas")
     parser.add_argument("--delay", type=float, default=None,
                         help="segundos entre chamadas (padrão: 6 no Gemini, 0 nos demais)")
     args = parser.parse_args()
@@ -98,13 +126,14 @@ def main() -> int:
     )
     essays = load_eval_set(args.file, args.limit)
     lines = []
+    rows: dict[int, dict] = {}
     print(f"Com RAG ({len(essays)} redações)...", file=sys.stderr)
     print(f"Provedor: {settings.provider} | modelo: {settings.llm_model}", file=sys.stderr)
-    lines.append(report("com RAG", compute_metrics(*run(analyzer, essays, use_rag=True, delay=delay))))
+    lines.append(report("com RAG", compute_metrics(*run(analyzer, essays, use_rag=True, delay=delay, rows=rows))))
     if not args.no_baseline:
         print(f"Sem RAG ({len(essays)} redações)...", file=sys.stderr)
-        lines.append(report("sem RAG", compute_metrics(*run(analyzer, essays, use_rag=False, delay=delay))))
-    print("\n".join(lines))
+        lines.append(report("sem RAG", compute_metrics(*run(analyzer, essays, use_rag=False, delay=delay, rows=rows))))
+    print(markdown(rows, lines, settings.provider, settings.llm_model) if args.markdown else "\n".join(lines))
     return 0
 
 

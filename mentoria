@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_DIR="$ROOT/infrastructure/docker"
 K8S_DIR="$ROOT/infrastructure/kubernetes"
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:8080}"
+SAGA_URL="${SAGA_URL:-http://localhost:8090}"
 INGRESS_NGINX_URL="https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.1/deploy/static/provider/cloud/deploy.yaml"
 
 STUDENT_EMAIL="ana@demo.mentoria.test"
@@ -16,6 +17,21 @@ info() { printf '\033[36m▸\033[0m %s\n' "$*"; }
 ok()   { printf '\033[32m✔\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31m✘\033[0m %s\n' "$*" >&2; exit 1; }
+
+# Python para ler JSON nos atalhos: no Windows (Git Bash) o comando costuma ser "python" ou "py".
+PYTHON_CMD=""
+py_run() {
+  if [[ -z "$PYTHON_CMD" ]]; then
+    local candidate
+    for candidate in python3 python py; do
+      if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import json' >/dev/null 2>&1; then
+        PYTHON_CMD="$candidate"; break
+      fi
+    done
+    [[ -n "$PYTHON_CMD" ]] || die "Python 3 não encontrado. Instale em https://www.python.org/downloads/ (marque \"Add python.exe to PATH\") e abra um terminal novo."
+  fi
+  PYTHONUTF8=1 PYTHONIOENCODING=utf-8 "$PYTHON_CMD" "$@"
+}
 
 compose() { docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_DIR/docker-compose.yaml" "$@"; }
 
@@ -57,7 +73,7 @@ token_for() {
   response=$(curl -s -X POST "$GATEWAY_URL/api/v1/auth/login" \
     -H 'Content-Type: application/json' \
     -d "{\"email\":\"$email\",\"password\":\"$DEMO_PASSWORD\"}")
-  python3 -c 'import sys,json
+  py_run -c 'import sys,json
 try: print(json.load(sys.stdin)["accessToken"])
 except Exception: sys.exit(1)' <<<"$response" || die "Login falhou para $email: $response"
 }
@@ -106,7 +122,7 @@ cmd_ai_test() {
 
 cmd_ai_analyze() {
   local body
-  body=$(python3 - <<'EOF'
+  body=$(py_run - <<'EOF'
 import json, uuid
 text = (
     "Nas grandes cidades brasileiras, milhões de trabalhadores perdem horas diárias no transporte coletivo. "
@@ -121,12 +137,12 @@ EOF
 )
   info "Analisando redação de exemplo (pode levar alguns segundos)..."
   docker run --rm --network docker_app curlimages/curl:8.11.1 -s -X POST http://ai-service:8000/api/v1/analysis \
-    -H 'Content-Type: application/json' -d "$body" | python3 -m json.tool --no-ensure-ascii
+    -H 'Content-Type: application/json' -d "$body" | py_run -m json.tool --no-ensure-ascii
 }
 
 cmd_ai_plan() {
   local body
-  body=$(MESSAGE="${1:-Tenho 8 horas por semana e a prova é daqui a 6 semanas. Vou mal em matemática e física e quero melhorar a proposta de intervenção da redação.}" python3 - <<'EOF'
+  body=$(MESSAGE="${1:-Tenho 8 horas por semana e a prova é daqui a 6 semanas. Vou mal em matemática e física e quero melhorar a proposta de intervenção da redação.}" py_run - <<'EOF'
 import json, os, uuid
 print(json.dumps({
     "studentId": str(uuid.uuid4()),
@@ -140,7 +156,7 @@ EOF
 )
   info "Pedindo o plano de estudos (pode levar alguns segundos)..."
   docker run --rm --network docker_app curlimages/curl:8.11.1 -s -X POST http://ai-service:8000/api/v1/study-plans/suggestions \
-    -H 'Content-Type: application/json' -d "$body" | python3 -m json.tool --no-ensure-ascii
+    -H 'Content-Type: application/json' -d "$body" | py_run -m json.tool --no-ensure-ascii
 }
 
 cmd_k8s() {
@@ -174,6 +190,100 @@ EOF
   esac
 }
 
+
+# ------------------------------------------------------------------ SAGA (demonstração sem frontend)
+
+json_get() { py_run -c 'import sys,json
+data=json.load(sys.stdin)
+for key in sys.argv[1].split("."):
+    data=data[int(key)] if isinstance(data,list) else data.get(key)
+print("" if data is None else data)' "$1"; }
+
+api() {
+  local method="$1" path="$2" body="${3:-}"
+  if [[ -n "$body" ]]; then
+    curl -s -X "$method" "$GATEWAY_URL$path" -H "Authorization: Bearer $SAGA_TOKEN" -H 'Content-Type: application/json' -d "$body"
+  else
+    curl -s -X "$method" "$GATEWAY_URL$path" -H "Authorization: Bearer $SAGA_TOKEN"
+  fi
+}
+
+show_quota() {
+  api GET /api/v1/student/quota | py_run -c 'import sys,json
+q=json.load(sys.stdin)
+print("  cota %s: disponiveis=%s reservadas=%s consumidas=%s" % (q.get("period"), q.get("available"), q.get("reserved"), q.get("consumed")))'
+}
+
+show_saga() {
+  curl -s "$SAGA_URL/api/v1/sagas/$1" | py_run -c 'import sys,json
+s=json.load(sys.stdin)
+fail=" (%s: %s)" % (s.get("failureReason"), s.get("failureDetail")) if s.get("failureReason") else ""
+print("  SAGA %s - status %s%s" % (s.get("id"), s.get("status"), fail))
+for step in s.get("steps", []):
+    print("    %s  %-28s %s" % (str(step.get("at"))[11:19], step.get("step"), step.get("detail") or ""))'
+}
+
+# Roda a SAGA de ponta a ponta pelo gateway e pelo BFF do aluno: cria uma redação, pede a correção,
+# acompanha o estado e mostra os passos do orquestrador, a cota e o modelo de leitura do CQRS.
+run_saga() {
+  local email="${1:-$STUDENT_EMAIL}" wait_seconds="${2:-150}"
+  SAGA_TOKEN=$(token_for "$email")
+  local theme essay request status=PROCESSING
+  theme=$(api GET /api/v1/student/themes | json_get 0.id)
+  [[ -n "$theme" ]] || die "Não encontrei temas no BFF do aluno."
+  essay=$(api POST /api/v1/student/essays "$(py_run -c 'import json,sys; print(json.dumps({"themeId": sys.argv[1], "text": (
+"A mobilidade urbana no Brasil ainda é marcada pela desigualdade. Quem mora nas periferias gasta horas por dia no transporte coletivo, "
+"o que reduz o tempo de estudo, de descanso e de convivência familiar.\n\n"
+"Em primeiro lugar, a expansão desordenada das cidades afastou a população de baixa renda dos empregos. Além disso, a prioridade dada "
+"ao automóvel congestionou as vias e tornou os ônibus mais lentos e caros.\n\n"
+"Portanto, cabe às prefeituras, com apoio do Ministério das Cidades, ampliar os corredores exclusivos de ônibus e integrar as tarifas, "
+"a fim de reduzir o tempo de deslocamento e garantir o direito à cidade.")}))' "$theme")" | json_get id)
+  [[ -n "$essay" ]] || die "Não foi possível criar a redação."
+  ok "Redação criada: $essay (tema $theme)"
+  info "Antes da correção:"; show_quota
+  local response
+  response=$(api POST "/api/v1/student/essays/$essay/correction-requests")
+  request=$(json_get id <<<"$response" 2>/dev/null || true)
+  [[ -n "$request" ]] || die "A correção não foi aceita: ${response:-sem resposta} (o gateway aceita 2 pedidos de correção por minuto; espere um pouco)."
+  ok "Correção solicitada (202 Accepted): $request"
+  info "Aguardando a SAGA (até ${wait_seconds}s)..."
+  for _ in $(seq 1 $((wait_seconds / 3))); do
+    status=$(api GET "/api/v1/student/correction-requests/$request" | json_get status 2>/dev/null || echo PROCESSING)
+    [[ "$status" != "PROCESSING" && -n "$status" ]] && break
+    sleep 3
+  done
+  bold "Estado final no Assessment: $status"
+  show_saga "$request"
+  info "Depois da correção:"; show_quota
+  if [[ "$status" == "COMPLETED" ]]; then
+    info "Feedback publicado (BFF do aluno):"
+    api GET "/api/v1/student/feedbacks/$request" | py_run -c 'import sys,json
+f=json.load(sys.stdin)
+print("  nota total %s" % f.get("totalScore"))
+for c in f.get("competencies", []):
+    print("  C%s=%s: %s" % (c.get("id"), c.get("score"), (c.get("comment") or "")[:110]))'
+    sleep 2
+    info "Modelo de leitura do CQRS (Study Plan) atualizado pelo evento FeedbackPublished:"
+    api GET /api/v1/student/plan | py_run -c 'import sys,json
+p=json.load(sys.stdin)
+print("  atualizado em %s" % p.get("updatedAt"))
+for t in p.get("tasks", []):
+    print("  - [%s] C%s %s" % (t.get("status"), t.get("competency"), t.get("title")))'
+  fi
+}
+
+cmd_saga_fail() {
+  local timeout
+  timeout=$(grep -E '^SAGA_ANALYSIS_TIMEOUT=' "$COMPOSE_DIR/.env" 2>/dev/null | cut -d= -f2)
+  bold "SAGA com falha: o AI Service será derrubado durante a correção"
+  compose stop ai-service >/dev/null
+  # Religa o AI Service mesmo se o teste parar no meio.
+  trap 'compose start ai-service >/dev/null 2>&1 && ok "AI Service de volta."' EXIT
+  warn "AI Service parado. A SAGA vai reservar a cota, esperar a análise (${timeout:-60s}) e compensar."
+  run_saga "${1:-$STUDENT_EMAIL}" 150 || true
+  info "Subindo o AI Service de novo..."
+}
+
 cmd_help() {
   cat <<EOF
 $(bold "MentorIA — atalhos locais")
@@ -196,6 +306,13 @@ Docker Compose:
   ./mentoria ai-eval [N]          Compara as notas da IA com as notas humanas de N redações (padrão 20), com e sem RAG
   ./mentoria ai-plan ["pedido"]   Pede um plano de estudos à IA (com um pedido de exemplo se nenhum for informado)
   ./mentoria ai-plan-eval         Testa o plano de estudos com pedidos legítimos e tentativas de ataque
+  ./mentoria ai-eval-report [N]   Gera docs/avaliacao-rag.md: N redações (padrão 5), nota humana × IA com e sem RAG
+  ./mentoria ai-metrics           Latência medida, tokens, custo estimado, cache e circuit breaker do AI Service
+
+SAGA (sem frontend, passando por gateway → BFF → serviços):
+  ./mentoria saga [email]         Caminho feliz: cria uma redação, pede a correção e mostra os passos da SAGA
+  ./mentoria saga-falha [email]   Falha provocada: derruba o AI Service, pede a correção e mostra a compensação
+  ./mentoria sagas                Lista as últimas SAGAs do orquestrador
 
 Kubernetes (Docker Desktop):
   ./mentoria k8s up|down|status|logs <deployment>|smoke
@@ -241,10 +358,18 @@ main() {
     ai-ingest)   compose exec ai-service python -m ai_service.ingest ;;
     ai-test)     require_docker; cmd_ai_test ;;
     ai-analyze)  require_docker; cmd_ai_analyze ;;
-    ai-import)   python3 -I "$ROOT/ai-service/scripts/import_essay_br.py" "$@" && info "Rode ./mentoria restart ai-service para vetorizar o corpus novo." ;;
+    ai-import)   py_run -I "$ROOT/ai-service/scripts/import_essay_br.py" "$@" && info "Rode ./mentoria restart ai-service para vetorizar o corpus novo." ;;
     ai-eval)     compose exec ai-service python -m ai_service.evaluate --limit "${1:-20}" ;;
+    ai-eval-report)
+                 compose exec -T ai-service python -m ai_service.evaluate --limit "${1:-5}" --markdown \
+                   > "$ROOT/docs/avaliacao-rag.md" && ok "Relatório salvo em docs/avaliacao-rag.md (preencha a seção Análise)." ;;
     ai-plan)     require_docker; cmd_ai_plan "${1:-}" ;;
     ai-plan-eval) compose exec ai-service python -m ai_service.plan_eval "$@" ;;
+    ai-metrics)  require_docker; docker run --rm --network docker_app curlimages/curl:8.11.1 -s \
+                   http://ai-service:8000/api/v1/metrics | py_run -m json.tool --no-ensure-ascii ;;
+    saga)        require_docker; run_saga "${1:-$STUDENT_EMAIL}" ;;
+    saga-falha|saga-fail) require_docker; cmd_saga_fail "${1:-}" ;;
+    sagas)       curl -s "$SAGA_URL/api/v1/sagas" | py_run -m json.tool --no-ensure-ascii ;;
     k8s)         cmd_k8s "$@" ;;
     help|-h|--help) cmd_help ;;
     *) warn "Comando desconhecido: $cmd"; cmd_help; exit 1 ;;

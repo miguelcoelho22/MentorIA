@@ -332,3 +332,69 @@ spec:
         resources:
           requests:
             storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-saga
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-saga
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-saga
+spec:
+  serviceName: postgres-saga
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-saga
+  template:
+    metadata:
+      labels:
+        app: postgres-saga
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: saga_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: SAGA_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mentoria-db-secrets
+                  key: SAGA_DB_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: saga-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: saga-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

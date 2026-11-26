@@ -13,6 +13,9 @@ PROVIDERS = {
         "embedding_batch": 200,
         "send_dimensions": True,
         "llm_max_retries": 1,
+        # US$ por milhão de tokens (gpt-4o-mini, tabela pública da OpenAI).
+        "price_input": 0.15,
+        "price_output": 0.60,
     },
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -21,6 +24,10 @@ PROVIDERS = {
         "embedding_batch": 50,
         "send_dimensions": False,
         "llm_max_retries": 3,
+        # Estimativa em US$ por milhão de tokens no plano pago do Gemini Flash-Lite (o gratuito custa 0).
+        # Confira a tabela do Google e ajuste com LLM_PRICE_INPUT_PER_MILLION / LLM_PRICE_OUTPUT_PER_MILLION.
+        "price_input": 0.10,
+        "price_output": 0.40,
     },
 }
 
@@ -56,9 +63,18 @@ class Settings:
     corpus_dir: Path
     catalog_dir: Path
     auto_ingest: bool
-    rabbitmq_url: str
-    rabbitmq_exchange: str
-    rabbitmq_queue: str
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+    rabbitmq_exchange: str = "mentoria.saga"
+    rabbitmq_queue: str = "ai.processar.redacao"
+    rabbitmq_reply_routing_key: str = "saga.redacao.analisada"
+    messaging_enabled: bool = False
+    feedback_service_url: str | None = None
+    circuit_failure_threshold: int = 3
+    circuit_open_seconds: float = 30.0
+    cache_size: int = 256
+    cache_ttl_seconds: float = 3600.0
+    price_input_per_million: float = 0.15
+    price_output_per_million: float = 0.60
 
     @property
     def openai_compatible(self) -> bool:
@@ -90,7 +106,16 @@ class Settings:
             corpus_dir=Path(_env("CORPUS_DIR", str(DEFAULT_CORPUS_DIR))),
             catalog_dir=Path(_env("CATALOG_DIR", str(DEFAULT_CATALOG_DIR))),
             auto_ingest=_flag("AUTO_INGEST", True),
-            rabbitmq_url="amqp://mentoria:Rbt2026x@localhost:5672/",
-            rabbitmq_exchange="mentoria.saga",
-            rabbitmq_queue="ai.processar.redacao",
+            rabbitmq_url=_env("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+            rabbitmq_exchange=_env("RABBITMQ_EXCHANGE", "mentoria.saga"),
+            rabbitmq_queue=_env("RABBITMQ_QUEUE", "ai.processar.redacao"),
+            rabbitmq_reply_routing_key=_env("RABBITMQ_REPLY_ROUTING_KEY", "saga.redacao.analisada"),
+            messaging_enabled=_flag("MESSAGING_ENABLED", True),
+            feedback_service_url=os.getenv("FEEDBACK_SERVICE_URL") or None,
+            circuit_failure_threshold=int(_env("CIRCUIT_FAILURE_THRESHOLD", "3")),
+            circuit_open_seconds=float(_env("CIRCUIT_OPEN_SECONDS", "30")),
+            cache_size=int(_env("LLM_CACHE_SIZE", "256")),
+            cache_ttl_seconds=float(_env("LLM_CACHE_TTL_SECONDS", "3600")),
+            price_input_per_million=float(_env("LLM_PRICE_INPUT_PER_MILLION", str(preset["price_input"]))),
+            price_output_per_million=float(_env("LLM_PRICE_OUTPUT_PER_MILLION", str(preset["price_output"]))),
         )
