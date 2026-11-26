@@ -18,9 +18,16 @@ public class Saga {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private UUID requestId;
+
     private UUID redacaoId;
 
     private UUID alunoId;
+
+    private String theme;
+
+    @Column(columnDefinition = "TEXT")
+    private String text;
 
     @Enumerated(EnumType.STRING)
     private SagaStatus status;

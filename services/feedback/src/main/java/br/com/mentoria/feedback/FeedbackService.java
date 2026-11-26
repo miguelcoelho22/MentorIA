@@ -110,8 +110,15 @@ class FeedbackService {
         OffsetDateTime publishedAt = OffsetDateTime.now(ZoneOffset.UTC);
         List<EventScore> scores = competencies(requestId).stream()
                 .map(score -> new EventScore(score.id(), score.score())).toList();
-        var event = new FeedbackPublished(UUID.randomUUID(), requestId, existing.studentId(), publishedAt.toInstant(),
-                existing.totalScore(), scores);
+        var event = new FeedbackPublished(
+                UUID.randomUUID(),
+                sagaId,
+                requestId,
+                existing.studentId(),
+                publishedAt.toInstant(),
+                existing.totalScore(),
+                scores
+        );
 
         jdbc.update("UPDATE feedbacks SET status = 'PUBLISHED', published_at = ? WHERE request_id = ?", publishedAt, requestId);
         jdbc.update("INSERT INTO outbox_events (event_id, request_id, event_type, payload) VALUES (?, ?, ?, ?)",
@@ -145,4 +152,43 @@ class FeedbackService {
 
     private record StoredFeedback(UUID requestId, UUID studentId, UUID essayId, Status status, int totalScore,
             OffsetDateTime publishedAt) { }
+
+    @Transactional
+    public DraftResult createDraftFromAnalysis(
+            UUID requestId,
+            AnalyzedDraftRequest request
+    ) {
+        lockRequest(requestId);
+
+        StoredFeedback existing = find(requestId);
+
+        if (existing != null) {
+            return new DraftResult(view(existing), false);
+        }
+
+        List<Competency> competencies = request.competencies();
+
+        int total = competencies.stream()
+                .mapToInt(Competency::score)
+                .sum();
+
+        jdbc.update("""
+            INSERT INTO feedbacks (request_id, student_id, essay_id, status, total_score)
+            VALUES (?, ?, ?, 'DRAFT', ?)
+            """, requestId, request.studentId(), request.essayId(), total);
+
+        jdbc.batchUpdate(
+                "INSERT INTO competency_scores (request_id, competency, score, comment) VALUES (?, ?, ?, ?)",
+                competencies.stream()
+                        .map(score -> new Object[]{
+                                requestId, score.id(), score.score(), score.comment()
+                        }).toList()
+        );
+
+        return new DraftResult(
+                new Feedback(requestId, request.studentId(), request.essayId(),
+                        Status.DRAFT, total, null, competencies),
+                true
+        );
+    }
 }

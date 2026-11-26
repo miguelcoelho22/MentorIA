@@ -8,13 +8,14 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "aio-pika>=9.5.0",
     "fastapi>=0.162.2",
     "langchain>=1.4.9",
     "langchain-community>=0.4.2",
     "langchain-openai>=1.7.4",
     "numpy>=2.3",
     "pgvector>=0.5.1",
-    "psycopg>=3.3.8",
+    "psycopg[binary]>=3.3.8",
     "python-dotenv>=1.2.4",
     "uvicorn[standard]>=0.54.0",
 ]

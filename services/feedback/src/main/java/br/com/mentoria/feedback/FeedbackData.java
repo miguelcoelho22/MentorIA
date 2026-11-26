@@ -25,8 +25,21 @@ final class FeedbackData {
 
     record DraftResult(Feedback feedback, boolean created) { }
 
-    record FeedbackPublished(UUID eventId, UUID requestId, UUID studentId, Instant publishedAt, int totalScore,
-            List<EventScore> competencies) { }
-
     record EventScore(int id, int score) { }
+
+    record AnalyzedDraftRequest(
+            UUID studentId,
+            UUID essayId,
+            List<Competency> competencies
+    ) { }
+
+    record FeedbackPublished(
+            UUID eventId,
+            Long sagaId,
+            UUID requestId,
+            UUID studentId,
+            Instant publishedAt,
+            int totalScore,
+            List<EventScore> competencies
+    ) { }
 }

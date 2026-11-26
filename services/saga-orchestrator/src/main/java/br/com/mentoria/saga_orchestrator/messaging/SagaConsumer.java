@@ -28,4 +28,18 @@ public class SagaConsumer {
 
         sagaService.processarResultadoCota(event);
     }
+
+    @RabbitListener(queues = RabbitMQConfig.REDACAO_ANALISADA_QUEUE)
+    public void receberResultadoAnalise(RedacaoAnalisadaEvent event) {
+        System.out.println("Análise da redação recebida: " + event.essayId());
+        sagaService.processarResultadoAnalise(event);
+    }
+
+    @RabbitListener(queues = RabbitMQConfig.FEEDBACK_PUBLISHED_QUEUE)
+    public void receberFeedbackPublicado(FeedbackPublishedEvent event) {
+
+        System.out.println("Feedback publicado para a redação: " + event.requestId());
+
+        sagaService.processarFeedbackPublicado(event);
+    }
 }

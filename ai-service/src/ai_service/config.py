@@ -56,6 +56,9 @@ class Settings:
     corpus_dir: Path
     catalog_dir: Path
     auto_ingest: bool
+    rabbitmq_url: str
+    rabbitmq_exchange: str
+    rabbitmq_queue: str
 
     @property
     def openai_compatible(self) -> bool:
@@ -87,4 +90,7 @@ class Settings:
             corpus_dir=Path(_env("CORPUS_DIR", str(DEFAULT_CORPUS_DIR))),
             catalog_dir=Path(_env("CATALOG_DIR", str(DEFAULT_CATALOG_DIR))),
             auto_ingest=_flag("AUTO_INGEST", True),
+            rabbitmq_url="amqp://mentoria:Rbt2026x@localhost:5672/",
+            rabbitmq_exchange="mentoria.saga",
+            rabbitmq_queue="ai.processar.redacao",
         )
