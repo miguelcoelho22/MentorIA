@@ -4,6 +4,8 @@ import java.util.UUID;
 
 public record RedacaoEnviadaEvent(
         UUID redacaoId,
-        UUID alunoId
+        UUID alunoId,
+        String theme,
+        String text
 ) {
 }

@@ -5,6 +5,9 @@ import java.util.UUID;
 public record ProcessarRedacaoCommand (
         Long sagaId,
         UUID requestId,
-        UUID studentId
+        UUID studentId,
+        UUID essayId,
+        String theme,
+        String text
 ){
 }

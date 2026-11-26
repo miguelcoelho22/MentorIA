@@ -1,5 +1,6 @@
 package br.com.mentoria.saga_orchestrator.config;
 
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -18,6 +19,8 @@ public class RabbitMQConfig {
     public static final String COTA_VALIDADA_QUEUE = "saga.cota.validada";
 
     public static final String PROCESSAR_REDACAO_QUEUE = "ai.processar.redacao";
+
+    public static final String REDACAO_ANALISADA_QUEUE = "saga.redacao.analisada";
 
     @Bean
     public DirectExchange sagaExchange() {
@@ -52,7 +55,9 @@ public class RabbitMQConfig {
 
     @Bean
     public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
-        return new RabbitTemplate(connectionFactory);
+        RabbitTemplate template = new RabbitTemplate(connectionFactory);
+        template.setMandatory(true);
+        return template;
     }
 
     @Bean
@@ -79,5 +84,42 @@ public class RabbitMQConfig {
                 .bind(processarRedacaoQueue())
                 .to(sagaExchange())
                 .with("ai.processar.redacao");
+    }
+
+    @Bean
+    public Queue redacaoAnalisadaQueue() {
+        return new Queue(REDACAO_ANALISADA_QUEUE, true);
+    }
+
+    @Bean
+    public Binding redacaoAnalisadaBinding() {
+        return BindingBuilder
+                .bind(redacaoAnalisadaQueue())
+                .to(sagaExchange())
+                .with("saga.redacao.analisada");
+    }
+
+    public static final String FEEDBACK_PUBLISHED_QUEUE = "saga.feedback.publicado";
+
+    @Bean
+    public Queue feedbackPublishedQueue() {
+        return new Queue(FEEDBACK_PUBLISHED_QUEUE, true);
+    }
+
+    @Bean
+    public Binding feedbackPublishedBinding() {
+        return BindingBuilder
+                .bind(feedbackPublishedQueue())
+                .to(eventsExchange())
+                .with("feedback.published");
+    }
+    @Bean
+    public TopicExchange eventsExchange() {
+        return new TopicExchange("mentoria.events", true, false);
+    }
+
+    @Bean
+    public JacksonJsonMessageConverter jacksonJsonMessageConverter() {
+        return new JacksonJsonMessageConverter();
     }
 }
